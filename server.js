@@ -463,6 +463,20 @@ app.get('/api/locations', requireAuth, async (req, res) => {
     }
 });
 
+app.delete('/api/tasks/:id', requireAuth, async (req, res) => {
+    try {
+        const db = await getPool();
+        await db.request()
+            .input('id', sql.Int, req.params.id)
+            .input('userId', sql.Int, req.session.user.id)
+            .query('DELETE FROM Todo_Tasks WHERE Id = @id AND UserId = @userId');
+        res.json({ success: true });
+    } catch (err) {
+        console.error('Delete task error:', err);
+        res.status(500).json({ error: 'Server error' });
+    }
+});
+
 app.put('/api/tasks/:id/toggle', requireAuth, async (req, res) => {
     try {
         const db = await getPool();

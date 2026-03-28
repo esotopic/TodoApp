@@ -163,6 +163,14 @@
         .task-item.complete .task-check svg { display: block; }
         .task-title { font-size: 14px; font-weight: 500; color: var(--tx); flex: 1; }
         .task-item.complete .task-title { text-decoration: line-through; color: var(--tx3); }
+        .task-delete {
+            width: 32px; height: 32px; border-radius: 50%; border: none;
+            background: transparent; cursor: pointer; display: flex;
+            align-items: center; justify-content: center; flex-shrink: 0;
+            transition: background 0.2s; color: var(--tx3);
+        }
+        .task-delete:hover { background: rgba(255,59,48,0.1); color: var(--red); }
+        .task-delete svg { width: 16px; height: 16px; }
         .empty-state {
             text-align: center; padding: 40px 20px; color: var(--tx3);
         }
@@ -331,6 +339,17 @@
             <div class="modal-actions">
                 <button class="modal-cancel" id="resetCancel">Cancel</button>
                 <button class="modal-confirm" id="resetConfirm">Reset</button>
+            </div>
+        </div>
+    </div>
+
+    <div class="modal-overlay" id="deleteModal">
+        <div class="modal-box">
+            <h3>Delete Task?</h3>
+            <p>Remove "<span id="deleteTaskName"></span>" from your list?</p>
+            <div class="modal-actions">
+                <button class="modal-cancel" id="deleteCancel">Cancel</button>
+                <button class="modal-confirm" id="deleteConfirm">Delete</button>
             </div>
         </div>
     </div>
@@ -615,32 +634,36 @@
 
         tasksContainer.innerHTML = '';
 
-        // Group by category
+        // Group by location
         const grouped = {};
-        CATEGORIES.forEach(c => grouped[c] = []);
-        grouped['Other'] = [];
-
         tasks.forEach(t => {
-            const cat = CATEGORIES.includes(t.Category) ? t.Category : 'Other';
-            grouped[cat].push(t);
+            const loc = t.Location || 'Other';
+            if (!grouped[loc]) grouped[loc] = [];
+            grouped[loc].push(t);
         });
 
-        // Render each category that has tasks
-        [...CATEGORIES, 'Other'].forEach(cat => {
-            if (grouped[cat].length === 0) return;
+        // Sort location names alphabetically, but put "Other" at the end
+        const locationNames = Object.keys(grouped).sort((a, b) => {
+            if (a === 'Other') return 1;
+            if (b === 'Other') return -1;
+            return a.localeCompare(b);
+        });
+
+        // Render each location section
+        locationNames.forEach(loc => {
+            if (grouped[loc].length === 0) return;
 
             const section = document.createElement('div');
             section.className = 'cat-section';
 
             const header = document.createElement('div');
             header.className = 'cat-header';
-            const icons = { Home: '🏠', Work: '💼', Health: '💪', Learning: '📚', Other: '📌' };
-            header.textContent = `${icons[cat] || ''} ${cat}`;
+            header.textContent = `${getLocIcon(loc)} ${loc}`;
             section.appendChild(header);
 
             // Incomplete first, then complete
-            const incomplete = grouped[cat].filter(t => !t.IsComplete);
-            const complete = grouped[cat].filter(t => t.IsComplete);
+            const incomplete = grouped[loc].filter(t => !t.IsComplete);
+            const complete = grouped[loc].filter(t => t.IsComplete);
 
             [...incomplete, ...complete].forEach(task => {
                 const div = document.createElement('div');
@@ -649,8 +672,23 @@
                     <div class="task-check">
                         <svg viewBox="0 0 24 24" fill="white" stroke="none"><path d="M9 16.17L4.83 12l-1.42 1.41L9 19 21 7l-1.41-1.41L9 16.17z"/></svg>
                     </div>
-                    <div class="task-title">${escapeHtml(task.Title)}</div>`;
-                div.addEventListener('click', () => toggleTask(task.Id));
+                    <div class="task-title">${escapeHtml(task.Title)}</div>
+                    <button class="task-delete" title="Delete task">
+                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 6h18"/><path d="M8 6V4a2 2 0 012-2h4a2 2 0 012 2v2"/><path d="M19 6l-1 14a2 2 0 01-2 2H8a2 2 0 01-2-2L5 6"/><path d="M10 11v6"/><path d="M14 11v6"/></svg>
+                    </button>`;
+
+                // Check circle toggles complete
+                div.querySelector('.task-check').addEventListener('click', (e) => {
+                    e.stopPropagation();
+                    toggleTask(task.Id);
+                });
+
+                // Delete button
+                div.querySelector('.task-delete').addEventListener('click', (e) => {
+                    e.stopPropagation();
+                    confirmDeleteTask(task.Id, task.Title);
+                });
+
                 section.appendChild(div);
             });
 
@@ -661,6 +699,21 @@
     async function toggleTask(id) {
         await fetch(`/api/tasks/${id}/toggle`, { method: 'PUT' });
         loadTasks();
+        loadLocations();
+    }
+
+    function confirmDeleteTask(id, title) {
+        const modal = document.getElementById('deleteModal');
+        document.getElementById('deleteTaskName').textContent = title;
+        modal.classList.add('show');
+        // Store task id for confirm
+        modal.dataset.taskId = id;
+    }
+
+    async function deleteTask(id) {
+        await fetch(`/api/tasks/${id}`, { method: 'DELETE' });
+        loadTasks();
+        loadLocations();
     }
 
     function escapeHtml(text) {
@@ -697,6 +750,25 @@
             alert('Reset failed. Please try again.');
         }
         btn.disabled = false; btn.textContent = 'Reset';
+    });
+
+    // ============================================================================
+    // DELETE TASK MODAL
+    // ============================================================================
+    document.getElementById('deleteCancel').addEventListener('click', () => {
+        document.getElementById('deleteModal').classList.remove('show');
+    });
+    document.getElementById('deleteModal').addEventListener('click', (e) => {
+        if (e.target.id === 'deleteModal') document.getElementById('deleteModal').classList.remove('show');
+    });
+    document.getElementById('deleteConfirm').addEventListener('click', async () => {
+        const modal = document.getElementById('deleteModal');
+        const taskId = modal.dataset.taskId;
+        const btn = document.getElementById('deleteConfirm');
+        btn.disabled = true; btn.textContent = 'Deleting...';
+        await deleteTask(taskId);
+        modal.classList.remove('show');
+        btn.disabled = false; btn.textContent = 'Delete';
     });
 
     // ============================================================================
