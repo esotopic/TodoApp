@@ -117,6 +117,20 @@
         }
         .typing-indicator.show { display: block; }
 
+        /* Suggestion chips */
+        .chips-container { padding: 4px 16px 6px; }
+        .chips-row {
+            display: flex; gap: 6px; flex-wrap: wrap; margin-bottom: 6px;
+        }
+        .chip {
+            padding: 8px 14px; border-radius: 20px; font-size: 13px;
+            font-weight: 500; cursor: pointer; transition: all 0.15s;
+            border: 1.5px solid var(--acc); color: var(--acc); background: var(--s1);
+            font-family: inherit; white-space: nowrap;
+        }
+        .chip:hover { background: var(--acc); color: #fff; }
+        .chip:active { transform: scale(0.95); }
+
         /* ============= TODO TAB ============= */
         .tasks-scroll { flex: 1; overflow-y: auto; padding: 0 16px 16px; }
         .cat-section { margin-bottom: 20px; }
@@ -430,23 +444,55 @@
             const data = await fetch('/api/chat/start', { method: 'POST' }).then(r => r.json());
             typingIndicator.classList.remove('show');
             if (data.reply) {
-                addBubble('assistant', data.reply);
+                addBubble('assistant', data.reply, data.chips);
                 scrollChat();
             }
         } catch (err) {
             typingIndicator.classList.remove('show');
-            addBubble('assistant', 'Welcome! Tell me about your goals and I\'ll help you build a task list.');
+            addBubble('assistant', 'Welcome! Tell me about your goals and I\'ll help you build a task list.', [['Home', 'Work', 'Health', 'Learning']]);
             scrollChat();
         }
         chatSend.disabled = false;
         chatInput.focus();
     }
 
-    function addBubble(role, text) {
+    function addBubble(role, text, chips) {
         const div = document.createElement('div');
         div.className = 'chat-bubble ' + role;
         div.textContent = text;
         chatMessages.appendChild(div);
+
+        // Render suggestion chips after assistant messages
+        if (role === 'assistant' && chips && chips.length > 0) {
+            renderChips(chips);
+        }
+    }
+
+    function renderChips(chips) {
+        // Remove any existing chips
+        document.querySelectorAll('.chips-container').forEach(c => c.remove());
+
+        const container = document.createElement('div');
+        container.className = 'chips-container';
+
+        chips.forEach(row => {
+            const rowDiv = document.createElement('div');
+            rowDiv.className = 'chips-row';
+            row.forEach(label => {
+                const chip = document.createElement('button');
+                chip.className = 'chip';
+                chip.textContent = label;
+                chip.addEventListener('click', () => {
+                    // Remove chips when one is clicked
+                    container.remove();
+                    sendMessage(label);
+                });
+                rowDiv.appendChild(chip);
+            });
+            container.appendChild(rowDiv);
+        });
+
+        chatMessages.appendChild(container);
     }
 
     function scrollChat() {
@@ -481,11 +527,14 @@
 
             typingIndicator.classList.remove('show');
 
+            // Remove old chips
+            document.querySelectorAll('.chips-container').forEach(c => c.remove());
+
             if (data.error) {
                 addBubble('assistant', '⚠️ ' + data.error);
                 scrollChat();
             } else if (data.reply) {
-                addBubble('assistant', data.reply);
+                addBubble('assistant', data.reply, data.chips);
                 scrollChat();
             }
 

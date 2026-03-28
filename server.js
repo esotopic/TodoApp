@@ -146,15 +146,18 @@ app.post('/api/chat/start', requireAuth, async (req, res) => {
             if (block.type === 'text') assistantText += block.text;
         }
 
+        // Parse chips from response
+        const parsed = parseChips(assistantText);
+
         // Save both the hidden start message and reply
         await db.request().input('userId', sql.Int, userId).input('role', sql.NVarChar, 'user').input('content', sql.NVarChar, 'Start')
             .query('INSERT INTO Todo_Chat (UserId, Role, Content) VALUES (@userId, @role, @content)');
-        if (assistantText) {
-            await db.request().input('userId', sql.Int, userId).input('role', sql.NVarChar, 'assistant').input('content', sql.NVarChar, assistantText)
+        if (parsed.cleanText) {
+            await db.request().input('userId', sql.Int, userId).input('role', sql.NVarChar, 'assistant').input('content', sql.NVarChar, parsed.cleanText)
                 .query('INSERT INTO Todo_Chat (UserId, Role, Content) VALUES (@userId, @role, @content)');
         }
 
-        res.json({ reply: assistantText });
+        res.json({ reply: parsed.cleanText, chips: parsed.chips });
     } catch (err) {
         console.error('Chat start error:', err);
         res.status(500).json({ error: 'AI error: ' + err.message });
@@ -287,7 +290,7 @@ app.post('/api/chat', requireAuth, async (req, res) => {
 
                 // Now send tool result back to get final text
                 const followUp = await anthropic.messages.create({
-                    model: 'claude-sonnet-4-20250514',
+                    model: 'claude-sonnet-4-6',
                     max_tokens: 1024,
                     system: systemPrompt,
                     tools: tools,
@@ -304,17 +307,21 @@ app.post('/api/chat', requireAuth, async (req, res) => {
             }
         }
 
-        // Save assistant response
-        if (assistantText) {
+        // Parse chips from response
+        const parsed = parseChips(assistantText);
+
+        // Save assistant response (clean text without chip markup)
+        if (parsed.cleanText) {
             await db.request()
                 .input('userId', sql.Int, userId)
                 .input('role', sql.NVarChar, 'assistant')
-                .input('content', sql.NVarChar, assistantText)
+                .input('content', sql.NVarChar, parsed.cleanText)
                 .query('INSERT INTO Todo_Chat (UserId, Role, Content) VALUES (@userId, @role, @content)');
         }
 
         res.json({
-            reply: assistantText,
+            reply: parsed.cleanText,
+            chips: parsed.chips,
             toolUsed: toolUsed
         });
     } catch (err) {
@@ -329,6 +336,27 @@ function buildSystemPrompt(onboardingComplete, existingTasks, username) {
 IMPORTANT: The app has exactly 4 task categories: Home, Work, Health, Learning.
 Every task you create MUST have one of these 4 categories. No other categories allowed.
 The user can select a category button in the UI — if their message starts with [Category: X], they want tasks added to that specific category.`;
+
+    const chipsInstruction = `
+
+SUGGESTION CHIPS — CRITICAL:
+After EVERY response, you MUST include clickable suggestion chips so the user can tap to respond quickly.
+Format: Put chips at the very end of your message using this exact format:
+<<CHIPS>>
+row: Option A | Option B | Option C
+row: Option D | Option E
+<<END>>
+
+Rules for chips:
+- ALWAYS include chips — never skip them
+- Each "row:" is a group of related options displayed on one line
+- Keep chip labels SHORT (1-4 words max)
+- Make chips contextually smart — anticipate what the user might want next
+- Include a MIX of specifics and general options
+- For tasks: include WHERE options (stores, locations), WHEN options (today, this week, this month), and related items
+- Example: user says "groceries" in Home category → offer store chips AND timing chips AND related task chips
+- For onboarding: offer the 4 category areas as chips
+- After saving tasks: offer "Add more" | "Show my tasks" | category-specific options`;
 
     if (!onboardingComplete) {
         return `You are a friendly, focused AI task coach inside a Todo app called "1000 Problems Todo". The user's name is ${username}.
@@ -348,7 +376,7 @@ Rules:
 - Be warm but efficient
 - Ask ONE question at a time
 - Generate practical, specific tasks (not vague ones)
-- Include a mix of quick wins and bigger goals${categoryNote}`;
+- Include a mix of quick wins and bigger goals${categoryNote}${chipsInstruction}`;
     }
 
     const taskSummary = existingTasks.length > 0
@@ -365,7 +393,28 @@ You can help the user:
 
 If the user's message starts with [Category: X], they selected that category button and want to add tasks specifically to that section.
 
-When modifying tasks, always use the save_tasks tool with the COMPLETE updated list (existing + changes). Keep responses brief and actionable.${categoryNote}`;
+When modifying tasks, always use the save_tasks tool with the COMPLETE updated list (existing + changes). Keep responses brief and actionable.${categoryNote}${chipsInstruction}`;
+}
+
+// Parse suggestion chips from AI response
+function parseChips(text) {
+    const chipRegex = /<<CHIPS>>([\s\S]*?)<<END>>/;
+    const match = text.match(chipRegex);
+    if (!match) return { cleanText: text.trim(), chips: [] };
+
+    const cleanText = text.replace(chipRegex, '').trim();
+    const chipBlock = match[1].trim();
+    const chips = [];
+
+    chipBlock.split('\n').forEach(line => {
+        line = line.trim();
+        if (line.startsWith('row:')) {
+            const options = line.substring(4).split('|').map(o => o.trim()).filter(o => o);
+            if (options.length > 0) chips.push(options);
+        }
+    });
+
+    return { cleanText, chips };
 }
 
 // ============================================================================
