@@ -6,7 +6,6 @@
     <meta name="theme-color" content="#f5f5f7">
     <meta name="apple-mobile-web-app-capable" content="yes">
     <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
-    <meta name="apple-mobile-web-app-title" content="Todo">
     <title>Todo</title>
     <style>
         :root {
@@ -20,16 +19,16 @@
         body {
             background-color: var(--bg); color: var(--tx);
             font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Helvetica Neue', sans-serif;
-            font-size: 15px; line-height: 1.5;
-            -webkit-font-smoothing: antialiased;
+            font-size: 15px; line-height: 1.5; -webkit-font-smoothing: antialiased;
         }
         ::-webkit-scrollbar { width: 6px; }
         ::-webkit-scrollbar-track { background: transparent; }
         ::-webkit-scrollbar-thumb { background: var(--s3); border-radius: 3px; }
 
         .page-container {
-            max-width: 480px; margin: 0 auto; min-height: 100vh;
+            max-width: 480px; margin: 0 auto; height: 100vh;
             background: var(--bg); display: flex; flex-direction: column;
+            padding-bottom: 64px;
         }
 
         /* Top bar */
@@ -40,11 +39,37 @@
         .top-bar .user { color: var(--tx2); font-size: 0.8rem; }
         .top-bar .signout { color: var(--tx2); font-size: 0.8rem; text-decoration: none; }
 
+        /* Joke banner */
+        .joke-banner {
+            background: var(--s1); margin: 8px 16px; padding: 14px 16px;
+            border-radius: 12px; box-shadow: 0 1px 3px rgba(0,0,0,0.04);
+            text-align: center; font-size: 14px; color: var(--tx2);
+            font-style: italic; line-height: 1.4; min-height: 50px;
+            display: flex; align-items: center; justify-content: center;
+            flex-shrink: 0;
+        }
+        .joke-banner .joke-icon { margin-right: 8px; font-style: normal; }
+
         /* Page title */
         .page-title {
-            text-align: center; padding: 16px 16px 12px; font-size: 28px;
+            text-align: center; padding: 8px 16px 4px; font-size: 24px;
             font-weight: 700; color: var(--tx); letter-spacing: -0.02em; flex-shrink: 0;
         }
+
+        /* Category buttons */
+        .cat-buttons {
+            display: flex; gap: 8px; padding: 8px 16px; flex-shrink: 0;
+            overflow-x: auto;
+        }
+        .cat-btn {
+            flex: 1; min-width: 0; padding: 10px 8px; border-radius: 10px;
+            border: 2px solid var(--s3); background: var(--s1); color: var(--tx2);
+            font-size: 12px; font-weight: 600; text-transform: uppercase;
+            letter-spacing: 0.04em; cursor: pointer; transition: all 0.2s;
+            text-align: center; font-family: inherit;
+        }
+        .cat-btn.active { border-color: var(--acc); background: var(--acc); color: #fff; }
+        .cat-btn:hover:not(.active) { border-color: var(--brd); }
 
         /* Tab panels */
         .tab-panel { display: none; flex: 1; overflow: hidden; flex-direction: column; }
@@ -52,30 +77,30 @@
 
         /* ============= AI TAB ============= */
         .chat-messages {
-            flex: 1; overflow-y: auto; padding: 0 16px 16px;
+            flex: 1; overflow-y: auto; padding: 8px 16px 8px;
         }
         .chat-bubble {
-            max-width: 85%; margin-bottom: 12px; padding: 12px 16px;
+            max-width: 85%; margin-bottom: 10px; padding: 10px 14px;
             border-radius: 18px; font-size: 14px; line-height: 1.5;
             word-wrap: break-word; white-space: pre-wrap;
         }
         .chat-bubble.assistant {
             background: var(--s1); color: var(--tx); border-bottom-left-radius: 6px;
-            box-shadow: 0 1px 4px rgba(0,0,0,0.06); align-self: flex-start;
+            box-shadow: 0 1px 4px rgba(0,0,0,0.06);
         }
         .chat-bubble.user {
             background: var(--acc); color: #fff; border-bottom-right-radius: 6px;
             margin-left: auto;
         }
         .chat-input-row {
-            display: flex; gap: 8px; padding: 12px 16px;
-            background: var(--s1); border-top: 1px solid var(--brd); flex-shrink: 0;
+            display: flex; gap: 8px; padding: 8px 16px 10px;
+            background: var(--bg); flex-shrink: 0;
         }
         .chat-input {
             flex: 1; padding: 10px 14px; font-size: 15px;
             border: 2px solid var(--s3); border-radius: 24px;
-            background: var(--bg); color: var(--tx); outline: none;
-            font-family: inherit; resize: none;
+            background: var(--s1); color: var(--tx); outline: none;
+            font-family: inherit;
         }
         .chat-input:focus { border-color: var(--acc); }
         .chat-send {
@@ -87,47 +112,46 @@
         .chat-send:disabled { opacity: 0.4; cursor: default; }
         .chat-send svg { width: 20px; height: 20px; }
         .typing-indicator {
-            display: none; padding: 12px 16px; color: var(--tx3); font-size: 13px;
-            font-style: italic;
+            display: none; padding: 4px 16px 4px; color: var(--tx3); font-size: 13px;
+            font-style: italic; flex-shrink: 0;
         }
         .typing-indicator.show { display: block; }
 
         /* ============= TODO TAB ============= */
-        .tasks-container { flex: 1; overflow-y: auto; padding: 0 16px 16px; }
+        .tasks-scroll { flex: 1; overflow-y: auto; padding: 0 16px 16px; }
+        .cat-section { margin-bottom: 20px; }
+        .cat-header {
+            font-size: 13px; font-weight: 700; color: var(--tx3);
+            text-transform: uppercase; letter-spacing: 0.06em;
+            padding: 8px 0 6px; border-bottom: 1px solid var(--s3); margin-bottom: 8px;
+        }
         .task-item {
             display: flex; align-items: center; gap: 12px;
-            padding: 14px 16px; background: var(--s1); border-radius: 12px;
-            margin-bottom: 8px; box-shadow: 0 1px 3px rgba(0,0,0,0.04);
+            padding: 12px 14px; background: var(--s1); border-radius: 12px;
+            margin-bottom: 6px; box-shadow: 0 1px 3px rgba(0,0,0,0.04);
             cursor: pointer; transition: opacity 0.2s;
         }
-        .task-item.complete { opacity: 0.5; }
+        .task-item.complete { opacity: 0.45; }
         .task-check {
-            width: 24px; height: 24px; border-radius: 50%;
+            width: 22px; height: 22px; border-radius: 50%;
             border: 2px solid var(--brd); display: flex;
             align-items: center; justify-content: center; flex-shrink: 0;
             transition: all 0.2s;
         }
-        .task-item.complete .task-check {
-            background: var(--grn); border-color: var(--grn);
-        }
-        .task-check svg { width: 14px; height: 14px; display: none; }
+        .task-item.complete .task-check { background: var(--grn); border-color: var(--grn); }
+        .task-check svg { width: 13px; height: 13px; display: none; }
         .task-item.complete .task-check svg { display: block; }
-        .task-info { flex: 1; min-width: 0; }
-        .task-title { font-size: 15px; font-weight: 500; color: var(--tx); }
+        .task-title { font-size: 14px; font-weight: 500; color: var(--tx); flex: 1; }
         .task-item.complete .task-title { text-decoration: line-through; color: var(--tx3); }
-        .task-category {
-            font-size: 11px; font-weight: 600; color: var(--acc);
-            text-transform: uppercase; letter-spacing: 0.04em; margin-top: 2px;
-        }
         .empty-state {
-            text-align: center; padding: 60px 20px; color: var(--tx3);
+            text-align: center; padding: 40px 20px; color: var(--tx3);
         }
-        .empty-state .icon { font-size: 48px; margin-bottom: 12px; }
+        .empty-state .icon { font-size: 40px; margin-bottom: 8px; }
         .empty-state .msg { font-size: 15px; font-weight: 500; }
         .empty-state .sub { font-size: 13px; margin-top: 4px; }
 
         /* ============= SETTINGS TAB ============= */
-        .settings-container { flex: 1; overflow-y: auto; padding: 0 16px 16px; }
+        .settings-scroll { flex: 1; overflow-y: auto; padding: 0 16px 16px; }
         .settings-section {
             background: var(--s1); border-radius: 12px; padding: 20px;
             box-shadow: 0 1px 3px rgba(0,0,0,0.04); margin-bottom: 16px;
@@ -149,7 +173,6 @@
             cursor: pointer; transition: opacity 0.2s; font-family: inherit;
         }
         .btn-danger:hover { opacity: 0.9; }
-        .btn-danger:disabled { opacity: 0.5; cursor: default; }
 
         /* ============= BOTTOM NAV ============= */
         .bottom-nav {
@@ -193,13 +216,28 @@
     </style>
 </head>
 <body>
+    <script src="/jokes.js"></script>
     <main class="page-container">
         <div class="top-bar">
             <span class="user" id="username"></span>
             <a href="/logout" class="signout">Sign out</a>
         </div>
 
+        <!-- Joke banner -->
+        <div class="joke-banner" id="jokeBanner">
+            <span class="joke-icon">😄</span>
+            <span id="jokeText">Loading wisdom...</span>
+        </div>
+
         <div class="page-title" id="pageTitle">AI COACH</div>
+
+        <!-- Category buttons (visible on AI tab) -->
+        <div class="cat-buttons" id="catButtons">
+            <button class="cat-btn" data-cat="Home">🏠 Home</button>
+            <button class="cat-btn" data-cat="Work">💼 Work</button>
+            <button class="cat-btn" data-cat="Health">💪 Health</button>
+            <button class="cat-btn" data-cat="Learning">📚 Learning</button>
+        </div>
 
         <!-- ============= AI TAB ============= -->
         <div class="tab-panel active" id="panelAI">
@@ -215,12 +253,12 @@
 
         <!-- ============= TODO TAB ============= -->
         <div class="tab-panel" id="panelTodo">
-            <div class="tasks-container" id="tasksContainer"></div>
+            <div class="tasks-scroll" id="tasksContainer"></div>
         </div>
 
         <!-- ============= SETTINGS TAB ============= -->
         <div class="tab-panel" id="panelSettings">
-            <div class="settings-container">
+            <div class="settings-scroll">
                 <div class="settings-section">
                     <h3>Account</h3>
                     <div class="settings-item">
@@ -270,7 +308,6 @@
         </button>
     </nav>
 
-    <!-- Reset confirmation modal -->
     <div class="modal-overlay" id="resetModal">
         <div class="modal-box">
             <h3>Reset App?</h3>
@@ -287,7 +324,19 @@
     // STATE
     // ============================================================================
     let currentTab = 'AI';
+    let selectedCategory = null;
+    const CATEGORIES = ['Home', 'Work', 'Health', 'Learning'];
     const titles = { AI: 'AI COACH', Todo: 'TODO', Settings: 'SETTINGS' };
+
+    // ============================================================================
+    // JOKE BANNER
+    // ============================================================================
+    function showRandomJoke() {
+        const jokes = window.todoJokes || ["My to-do list is my greatest work of fiction."];
+        const joke = jokes[Math.floor(Math.random() * jokes.length)];
+        document.getElementById('jokeText').textContent = joke;
+    }
+    showRandomJoke();
 
     // ============================================================================
     // INIT
@@ -301,10 +350,7 @@
             window.location.href = '/login';
             return;
         }
-
-        // Load chat history
         loadChat();
-        // Load tasks
         loadTasks();
     }
 
@@ -312,24 +358,45 @@
     // TAB NAVIGATION
     // ============================================================================
     document.querySelectorAll('.nav-item').forEach(btn => {
-        btn.addEventListener('click', () => {
-            const tab = btn.dataset.tab;
-            switchTab(tab);
-        });
+        btn.addEventListener('click', () => switchTab(btn.dataset.tab));
     });
 
     function switchTab(tab) {
         currentTab = tab;
         document.getElementById('pageTitle').textContent = titles[tab];
-
         document.querySelectorAll('.tab-panel').forEach(p => p.classList.remove('active'));
         document.getElementById('panel' + tab).classList.add('active');
-
         document.querySelectorAll('.nav-item').forEach(n => n.classList.remove('active'));
         document.querySelector(`.nav-item[data-tab="${tab}"]`).classList.add('active');
 
+        // Show category buttons only on AI tab
+        document.getElementById('catButtons').style.display = tab === 'AI' ? 'flex' : 'none';
+        // Show joke on AI tab only
+        document.getElementById('jokeBanner').style.display = (tab === 'AI' || tab === 'Todo') ? 'flex' : 'none';
+
         if (tab === 'Todo') loadTasks();
     }
+
+    // ============================================================================
+    // CATEGORY BUTTONS
+    // ============================================================================
+    document.querySelectorAll('.cat-btn').forEach(btn => {
+        btn.addEventListener('click', () => {
+            const cat = btn.dataset.cat;
+            if (selectedCategory === cat) {
+                // Deselect
+                selectedCategory = null;
+                btn.classList.remove('active');
+                chatInput.placeholder = 'Type a message...';
+            } else {
+                selectedCategory = cat;
+                document.querySelectorAll('.cat-btn').forEach(b => b.classList.remove('active'));
+                btn.classList.add('active');
+                chatInput.placeholder = `Add ${cat} tasks...`;
+                chatInput.focus();
+            }
+        });
+    });
 
     // ============================================================================
     // CHAT / AI
@@ -344,8 +411,8 @@
             const data = await fetch('/api/chat').then(r => r.json());
             chatMessages.innerHTML = '';
             if (data.messages.length === 0) {
-                // No chat yet — send empty greeting to trigger onboarding
-                sendMessage('Hi');
+                // Auto-start onboarding — no "Hi", just trigger the AI
+                startOnboarding();
                 return;
             }
             data.messages.forEach(m => addBubble(m.role, m.content));
@@ -353,6 +420,25 @@
         } catch (err) {
             console.error('Failed to load chat:', err);
         }
+    }
+
+    async function startOnboarding() {
+        chatSend.disabled = true;
+        typingIndicator.classList.add('show');
+        try {
+            const data = await fetch('/api/chat/start', { method: 'POST' }).then(r => r.json());
+            typingIndicator.classList.remove('show');
+            if (data.reply) {
+                addBubble('assistant', data.reply);
+                scrollChat();
+            }
+        } catch (err) {
+            typingIndicator.classList.remove('show');
+            addBubble('assistant', 'Welcome! Tell me about your goals and I\'ll help you build a task list.');
+            scrollChat();
+        }
+        chatSend.disabled = false;
+        chatInput.focus();
     }
 
     function addBubble(role, text) {
@@ -369,17 +455,26 @@
     async function sendMessage(text) {
         if (!text.trim()) return;
 
+        // If a category is selected, prefix the message
+        let msgToSend = text;
+        if (selectedCategory) {
+            msgToSend = `[Category: ${selectedCategory}] ${text}`;
+        }
+
         addBubble('user', text);
         chatInput.value = '';
         chatSend.disabled = true;
         typingIndicator.classList.add('show');
         scrollChat();
 
+        // New joke on each message
+        showRandomJoke();
+
         try {
             const data = await fetch('/api/chat', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ message: text })
+                body: JSON.stringify({ message: msgToSend })
             }).then(r => r.json());
 
             typingIndicator.classList.remove('show');
@@ -390,7 +485,6 @@
             }
 
             if (data.toolUsed) {
-                // Tasks were saved — refresh if on todo tab
                 loadTasks();
             }
         } catch (err) {
@@ -412,7 +506,7 @@
     });
 
     // ============================================================================
-    // TASKS
+    // TASKS (grouped by category)
     // ============================================================================
     const tasksContainer = document.getElementById('tasksContainer');
 
@@ -436,74 +530,91 @@
             return;
         }
 
-        // Separate incomplete and complete
-        const incomplete = tasks.filter(t => !t.IsComplete);
-        const complete = tasks.filter(t => t.IsComplete);
-
         tasksContainer.innerHTML = '';
 
-        [...incomplete, ...complete].forEach(task => {
-            const div = document.createElement('div');
-            div.className = 'task-item' + (task.IsComplete ? ' complete' : '');
-            div.innerHTML = `
-                <div class="task-check">
-                    <svg viewBox="0 0 24 24" fill="white" stroke="none"><path d="M9 16.17L4.83 12l-1.42 1.41L9 19 21 7l-1.41-1.41L9 16.17z"/></svg>
-                </div>
-                <div class="task-info">
-                    <div class="task-title">${escapeHtml(task.Title)}</div>
-                    ${task.Category ? `<div class="task-category">${escapeHtml(task.Category)}</div>` : ''}
-                </div>`;
-            div.addEventListener('click', () => toggleTask(task.Id));
-            tasksContainer.appendChild(div);
+        // Group by category
+        const grouped = {};
+        CATEGORIES.forEach(c => grouped[c] = []);
+        grouped['Other'] = [];
+
+        tasks.forEach(t => {
+            const cat = CATEGORIES.includes(t.Category) ? t.Category : 'Other';
+            grouped[cat].push(t);
+        });
+
+        // Render each category that has tasks
+        [...CATEGORIES, 'Other'].forEach(cat => {
+            if (grouped[cat].length === 0) return;
+
+            const section = document.createElement('div');
+            section.className = 'cat-section';
+
+            const header = document.createElement('div');
+            header.className = 'cat-header';
+            const icons = { Home: '🏠', Work: '💼', Health: '💪', Learning: '📚', Other: '📌' };
+            header.textContent = `${icons[cat] || ''} ${cat}`;
+            section.appendChild(header);
+
+            // Incomplete first, then complete
+            const incomplete = grouped[cat].filter(t => !t.IsComplete);
+            const complete = grouped[cat].filter(t => t.IsComplete);
+
+            [...incomplete, ...complete].forEach(task => {
+                const div = document.createElement('div');
+                div.className = 'task-item' + (task.IsComplete ? ' complete' : '');
+                div.innerHTML = `
+                    <div class="task-check">
+                        <svg viewBox="0 0 24 24" fill="white" stroke="none"><path d="M9 16.17L4.83 12l-1.42 1.41L9 19 21 7l-1.41-1.41L9 16.17z"/></svg>
+                    </div>
+                    <div class="task-title">${escapeHtml(task.Title)}</div>`;
+                div.addEventListener('click', () => toggleTask(task.Id));
+                section.appendChild(div);
+            });
+
+            tasksContainer.appendChild(section);
         });
     }
 
     async function toggleTask(id) {
-        try {
-            await fetch(`/api/tasks/${id}/toggle`, { method: 'PUT' });
-            loadTasks();
-        } catch (err) {
-            console.error('Toggle failed:', err);
-        }
+        await fetch(`/api/tasks/${id}/toggle`, { method: 'PUT' });
+        loadTasks();
     }
 
     function escapeHtml(text) {
-        const div = document.createElement('div');
-        div.textContent = text;
-        return div.innerHTML;
+        const d = document.createElement('div');
+        d.textContent = text;
+        return d.innerHTML;
     }
 
     // ============================================================================
     // SETTINGS / RESET
     // ============================================================================
-    const resetBtn = document.getElementById('resetBtn');
-    const resetModal = document.getElementById('resetModal');
-    const resetCancel = document.getElementById('resetCancel');
-    const resetConfirm = document.getElementById('resetConfirm');
-
-    resetBtn.addEventListener('click', () => resetModal.classList.add('show'));
-    resetCancel.addEventListener('click', () => resetModal.classList.remove('show'));
-    resetModal.addEventListener('click', (e) => {
-        if (e.target === resetModal) resetModal.classList.remove('show');
+    document.getElementById('resetBtn').addEventListener('click', () => {
+        document.getElementById('resetModal').classList.add('show');
     });
-
-    resetConfirm.addEventListener('click', async () => {
-        resetConfirm.disabled = true;
-        resetConfirm.textContent = 'Resetting...';
+    document.getElementById('resetCancel').addEventListener('click', () => {
+        document.getElementById('resetModal').classList.remove('show');
+    });
+    document.getElementById('resetModal').addEventListener('click', (e) => {
+        if (e.target.id === 'resetModal') document.getElementById('resetModal').classList.remove('show');
+    });
+    document.getElementById('resetConfirm').addEventListener('click', async () => {
+        const btn = document.getElementById('resetConfirm');
+        btn.disabled = true; btn.textContent = 'Resetting...';
         try {
             await fetch('/api/reset', { method: 'POST' });
-            resetModal.classList.remove('show');
-            // Clear chat UI
+            document.getElementById('resetModal').classList.remove('show');
             chatMessages.innerHTML = '';
             tasksContainer.innerHTML = '';
-            // Switch to AI tab and restart onboarding
+            selectedCategory = null;
+            document.querySelectorAll('.cat-btn').forEach(b => b.classList.remove('active'));
             switchTab('AI');
-            sendMessage('Hi');
+            showRandomJoke();
+            startOnboarding();
         } catch (err) {
             alert('Reset failed. Please try again.');
         }
-        resetConfirm.disabled = false;
-        resetConfirm.textContent = 'Reset';
+        btn.disabled = false; btn.textContent = 'Reset';
     });
 
     // ============================================================================

@@ -111,6 +111,56 @@ app.get('/api/state', requireAuth, async (req, res) => {
 // ============================================================================
 // CHAT / AI
 // ============================================================================
+
+// Auto-start onboarding (no user "Hi" needed)
+app.post('/api/chat/start', requireAuth, async (req, res) => {
+    try {
+        const db = await getPool();
+        const userId = req.session.user.id;
+
+        // Check if already has chat history
+        const existing = await db.request()
+            .input('userId', sql.Int, userId)
+            .query('SELECT COUNT(*) as cnt FROM Todo_Chat WHERE UserId = @userId');
+        if (existing.recordset[0].cnt > 0) {
+            return res.json({ reply: null }); // Already has history
+        }
+
+        // Get onboarding state
+        const stateResult = await db.request().input('userId', sql.Int, userId)
+            .query('SELECT OnboardingComplete FROM Todo_UserState WHERE UserId = @userId');
+        const onboardingComplete = stateResult.recordset.length > 0 && stateResult.recordset[0].OnboardingComplete;
+
+        const systemPrompt = buildSystemPrompt(onboardingComplete, [], req.session.user.username);
+
+        // Send a single user message to kick off the conversation
+        const response = await anthropic.messages.create({
+            model: 'claude-sonnet-4-20250514',
+            max_tokens: 512,
+            system: systemPrompt,
+            messages: [{ role: 'user', content: 'Start' }]
+        });
+
+        let assistantText = '';
+        for (const block of response.content) {
+            if (block.type === 'text') assistantText += block.text;
+        }
+
+        // Save both the hidden start message and reply
+        await db.request().input('userId', sql.Int, userId).input('role', sql.NVarChar, 'user').input('content', sql.NVarChar, 'Start')
+            .query('INSERT INTO Todo_Chat (UserId, Role, Content) VALUES (@userId, @role, @content)');
+        if (assistantText) {
+            await db.request().input('userId', sql.Int, userId).input('role', sql.NVarChar, 'assistant').input('content', sql.NVarChar, assistantText)
+                .query('INSERT INTO Todo_Chat (UserId, Role, Content) VALUES (@userId, @role, @content)');
+        }
+
+        res.json({ reply: assistantText });
+    } catch (err) {
+        console.error('Chat start error:', err);
+        res.status(500).json({ error: 'AI error: ' + err.message });
+    }
+});
+
 app.get('/api/chat', requireAuth, async (req, res) => {
     try {
         const db = await getPool();
@@ -274,26 +324,35 @@ app.post('/api/chat', requireAuth, async (req, res) => {
 });
 
 function buildSystemPrompt(onboardingComplete, existingTasks, username) {
+    const categoryNote = `
+
+IMPORTANT: The app has exactly 4 task categories: Home, Work, Health, Learning.
+Every task you create MUST have one of these 4 categories. No other categories allowed.
+The user can select a category button in the UI — if their message starts with [Category: X], they want tasks added to that specific category.`;
+
     if (!onboardingComplete) {
         return `You are a friendly, focused AI task coach inside a Todo app called "1000 Problems Todo". The user's name is ${username}.
 
-This is an ONBOARDING conversation. Your goal is to learn about the user's priorities and generate a personalized task list. Follow these steps:
+This is an ONBOARDING conversation. Your goal is to learn about the user's priorities and generate a personalized task list across 4 life areas: Home, Work, Health, and Learning.
 
-1. FIRST MESSAGE: Welcome them warmly and ask what area of their life they'd like to get organized — work, personal, health, learning, or a mix?
-2. Ask 2-3 short follow-up questions (one at a time!) to understand their specific goals, deadlines, and priorities. Keep questions conversational and brief.
-3. After you have enough context (usually 3-4 exchanges), use the save_tasks tool to generate 5-15 actionable tasks organized by category. Set complete_onboarding to true.
-4. After saving, give a brief encouraging summary of what you created.
+If the user's first message is "Start", begin the onboarding directly — welcome them warmly and ask what they'd like to get organized first.
+
+Steps:
+1. FIRST MESSAGE: Welcome them by name and ask what area they'd like to tackle first — Home, Work, Health, or Learning?
+2. Ask 2-3 short follow-up questions (one at a time!) to understand their specific goals and priorities.
+3. After enough context (3-4 exchanges), use the save_tasks tool to generate 8-15 actionable tasks spread across the 4 categories. Set complete_onboarding to true.
+4. After saving, give a brief encouraging summary.
 
 Rules:
-- Keep responses SHORT (2-3 sentences max per message during Q&A)
-- Be warm but efficient — don't over-explain
+- Keep responses SHORT (2-3 sentences max)
+- Be warm but efficient
 - Ask ONE question at a time
 - Generate practical, specific tasks (not vague ones)
-- Include a mix of quick wins and bigger goals`;
+- Include a mix of quick wins and bigger goals${categoryNote}`;
     }
 
     const taskSummary = existingTasks.length > 0
-        ? `\nCurrent tasks:\n${existingTasks.map(t => `- [${t.IsComplete ? 'x' : ' '}] ${t.Title} (${t.Category || 'General'})`).join('\n')}`
+        ? `\nCurrent tasks:\n${existingTasks.map(t => `- [${t.IsComplete ? 'x' : ' '}] ${t.Title} (${t.Category || 'Home'})`).join('\n')}`
         : '\nNo tasks yet.';
 
     return `You are a helpful AI task coach inside "1000 Problems Todo". The user's name is ${username}. Onboarding is complete.${taskSummary}
@@ -303,9 +362,10 @@ You can help the user:
 - Reorganize or reprioritize tasks
 - Break down big tasks into smaller steps
 - Provide motivation and accountability
-- Answer questions about productivity
 
-When modifying tasks, always use the save_tasks tool with the COMPLETE updated list (existing + changes). Keep responses brief and actionable.`;
+If the user's message starts with [Category: X], they selected that category button and want to add tasks specifically to that section.
+
+When modifying tasks, always use the save_tasks tool with the COMPLETE updated list (existing + changes). Keep responses brief and actionable.${categoryNote}`;
 }
 
 // ============================================================================
