@@ -210,11 +210,17 @@ app.post('/api/chat', requireAuth, async (req, res) => {
         // Get existing tasks for context
         const tasksResult = await db.request()
             .input('userId', sql.Int, userId)
-            .query('SELECT Id, Title, Category, Location, IsComplete FROM Todo_Tasks WHERE UserId = @userId ORDER BY SortOrder ASC');
+            .query('SELECT Id, Title, Category, Location, DueDate, IsComplete, Source FROM Todo_Tasks WHERE UserId = @userId ORDER BY SortOrder ASC');
         const existingTasks = tasksResult.recordset;
 
+        // Get deleted tasks (anti-preferences) — last 50
+        const deletedResult = await db.request()
+            .input('userId', sql.Int, userId)
+            .query('SELECT TOP 50 Title, Location, DeletedDate FROM Todo_DeletedTasks WHERE UserId = @userId ORDER BY DeletedDate DESC');
+        const deletedTasks = deletedResult.recordset;
+
         // Build system prompt
-        const systemPrompt = buildSystemPrompt(onboardingComplete, existingTasks, req.session.user.username, userProfile);
+        const systemPrompt = buildSystemPrompt(onboardingComplete, existingTasks, req.session.user.username, userProfile, deletedTasks);
 
         // Call Claude with tool use
         const tools = [
@@ -227,6 +233,17 @@ app.post('/api/chat', requireAuth, async (req, res) => {
                         profile: { type: 'string', description: 'A comprehensive summary of everything learned about the user — their job/role, living situation, household members, fitness goals, preferred stores, daily routine, hobbies, priorities, etc. Write in 3rd person.' }
                     },
                     required: ['profile']
+                }
+            },
+            {
+                name: 'update_memory',
+                description: 'Silently update the user memory/profile with new information learned from the conversation — preferences discovered, anti-preferences from deleted tasks, routines, life context, etc. Call this whenever you learn something new about the user. The memory is a living document — rewrite it with ALL known info plus the new info.',
+                input_schema: {
+                    type: 'object',
+                    properties: {
+                        memory: { type: 'string', description: 'The COMPLETE updated user memory. Include everything from the previous profile PLUS new learnings. Write in 3rd person. Cover: preferences, anti-preferences, routines, family, health, stores, habits, goals, life context.' }
+                    },
+                    required: ['memory']
                 }
             },
             {
@@ -293,6 +310,19 @@ app.post('/api/chat', requireAuth, async (req, res) => {
                             .query('UPDATE Todo_UserState SET ProfileInfo = @profile, UpdatedDate = GETUTCDATE() WHERE UserId = @userId');
                     }
                     toolResults.push({ type: 'tool_result', tool_use_id: block.id, content: 'Profile saved successfully.' });
+                } else if (block.type === 'tool_use' && block.name === 'update_memory') {
+                    // Silently update user memory/profile
+                    const { memory } = block.input;
+                    const existingState = await db.request().input('userId', sql.Int, userId)
+                        .query('SELECT Id FROM Todo_UserState WHERE UserId = @userId');
+                    if (existingState.recordset.length === 0) {
+                        await db.request().input('userId', sql.Int, userId).input('memory', sql.NVarChar, memory)
+                            .query('INSERT INTO Todo_UserState (UserId, OnboardingComplete, ProfileInfo) VALUES (@userId, 0, @memory)');
+                    } else {
+                        await db.request().input('userId', sql.Int, userId).input('memory', sql.NVarChar, memory)
+                            .query('UPDATE Todo_UserState SET ProfileInfo = @memory, UpdatedDate = GETUTCDATE() WHERE UserId = @userId');
+                    }
+                    toolResults.push({ type: 'tool_result', tool_use_id: block.id, content: 'Memory updated successfully.' });
                 } else if (block.type === 'tool_use' && block.name === 'save_tasks') {
                     toolUsed = true;
                     const { tasks, complete_onboarding } = block.input;
@@ -369,7 +399,7 @@ app.post('/api/chat', requireAuth, async (req, res) => {
     }
 });
 
-function buildSystemPrompt(onboardingComplete, existingTasks, username, userProfile) {
+function buildSystemPrompt(onboardingComplete, existingTasks, username, userProfile, deletedTasks) {
     const categoryNote = `
 
 IMPORTANT: The app has exactly 4 task categories: Home, Work, Health, Learning.
@@ -437,10 +467,46 @@ Rules:
     }
 
     const taskSummary = existingTasks.length > 0
-        ? `\nCurrent tasks:\n${existingTasks.map(t => `- [${t.IsComplete ? 'x' : ' '}] ${t.Title} (${t.Category || 'Home'})${t.Location ? ' @ ' + t.Location : ''}`).join('\n')}`
+        ? `\nCurrent tasks:\n${existingTasks.map(t => `- [${t.IsComplete ? 'x' : ' '}] ${t.Title} (${t.Category || 'Home'})${t.Location ? ' @ ' + t.Location : ''}${t.Source === 'manual' ? ' [manually added]' : ''}`).join('\n')}`
         : '\nNo tasks yet.';
 
-    return `You are a helpful AI task coach inside "1000 Problems Todo". The user's name is ${username}. Onboarding is complete.${profileContext}${taskSummary}
+    // Deleted tasks = anti-preferences
+    const deletedContext = (deletedTasks && deletedTasks.length > 0)
+        ? `\n\nDELETED TASKS (anti-preferences — the user REMOVED these, learn from them):\n${deletedTasks.map(t => `- "${t.Title}"${t.Location ? ' @ ' + t.Location : ''}`).join('\n')}`
+        : '';
+
+    // Manually added tasks signal
+    const manualTasks = existingTasks.filter(t => t.Source === 'manual');
+    const manualContext = manualTasks.length > 0
+        ? `\n\nMANUALLY ADDED TASKS (strongest intent — user typed these themselves):\n${manualTasks.map(t => `- "${t.Title}"${t.Location ? ' @ ' + t.Location : ''}`).join('\n')}`
+        : '';
+
+    const memoryInstruction = `
+
+GROWING MEMORY — CRITICAL:
+You have an update_memory tool. Use it to silently update the user's profile/memory whenever you learn something new.
+The memory is your long-term knowledge about this user — it persists across conversations.
+
+WHEN TO UPDATE MEMORY (call update_memory silently, don't announce it):
+- User mentions a preference, habit, routine, family member, health condition, or goal
+- User deletes tasks → those are anti-preferences (they don't want/need those things)
+- User manually adds tasks → strongest signal of what matters to them
+- User mentions a store, brand, diet, schedule, or life event
+- User corrects you about something → update memory to avoid repeating the mistake
+
+WHAT TO INCLUDE in memory:
+- Preferences & anti-preferences (likes, dislikes, things they've rejected)
+- Routines (morning, evening, weekly patterns)
+- Family/household (names, ages, needs)
+- Health & fitness goals
+- Stores & brands they use
+- Work/career context
+- Hobbies & interests
+- Life context (upcoming events, moves, changes)
+
+IMPORTANT: When calling update_memory, include EVERYTHING from the existing profile PLUS the new info. Don't lose old information.`;
+
+    return `You are a helpful AI task coach inside "1000 Problems Todo". The user's name is ${username}. Onboarding is complete.${profileContext}${taskSummary}${deletedContext}${manualContext}${memoryInstruction}
 
 You can help the user:
 - Add new tasks (use save_tasks tool — include ALL existing tasks plus new ones)
@@ -525,7 +591,8 @@ app.post('/api/tasks', requireAuth, async (req, res) => {
             .input('location', sql.NVarChar, location ? location.trim() : null)
             .input('dueDate', sql.Date, dueDate || null)
             .input('sortOrder', sql.Int, nextOrder)
-            .query('INSERT INTO Todo_Tasks (UserId, Title, Location, DueDate, SortOrder) VALUES (@userId, @title, @location, @dueDate, @sortOrder)');
+            .input('source', sql.NVarChar, 'manual')
+            .query('INSERT INTO Todo_Tasks (UserId, Title, Location, DueDate, SortOrder, Source) VALUES (@userId, @title, @location, @dueDate, @sortOrder, @source)');
 
         res.json({ success: true });
     } catch (err) {
@@ -537,9 +604,16 @@ app.post('/api/tasks', requireAuth, async (req, res) => {
 app.delete('/api/tasks/:id', requireAuth, async (req, res) => {
     try {
         const db = await getPool();
+        const userId = req.session.user.id;
+        // Log to deleted tasks table before deleting (for memory/anti-preference learning)
         await db.request()
             .input('id', sql.Int, req.params.id)
-            .input('userId', sql.Int, req.session.user.id)
+            .input('userId', sql.Int, userId)
+            .query(`INSERT INTO Todo_DeletedTasks (UserId, Title, Location)
+                    SELECT UserId, Title, Location FROM Todo_Tasks WHERE Id = @id AND UserId = @userId`);
+        await db.request()
+            .input('id', sql.Int, req.params.id)
+            .input('userId', sql.Int, userId)
             .query('DELETE FROM Todo_Tasks WHERE Id = @id AND UserId = @userId');
         res.json({ success: true });
     } catch (err) {
@@ -572,6 +646,7 @@ app.post('/api/reset', requireAuth, async (req, res) => {
         await db.request().input('userId', sql.Int, userId).query('DELETE FROM Todo_Tasks WHERE UserId = @userId');
         await db.request().input('userId', sql.Int, userId).query('DELETE FROM Todo_Chat WHERE UserId = @userId');
         await db.request().input('userId', sql.Int, userId).query('DELETE FROM Todo_UserState WHERE UserId = @userId');
+        await db.request().input('userId', sql.Int, userId).query('DELETE FROM Todo_DeletedTasks WHERE UserId = @userId');
         res.json({ success: true });
     } catch (err) {
         console.error('Reset error:', err);

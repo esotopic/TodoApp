@@ -144,7 +144,16 @@
             font-size: 13px; font-weight: 700; color: var(--tx3);
             text-transform: uppercase; letter-spacing: 0.06em;
             padding: 8px 0 6px; border-bottom: 1px solid var(--s3); margin-bottom: 8px;
+            display: flex; align-items: center; justify-content: space-between;
         }
+        .checkin-btn {
+            padding: 4px 12px; border-radius: 14px; font-size: 11px;
+            font-weight: 600; cursor: pointer; transition: all 0.15s;
+            border: 1.5px solid var(--grn); color: var(--grn); background: transparent;
+            font-family: inherit; text-transform: none; letter-spacing: 0;
+        }
+        .checkin-btn:hover { background: var(--grn); color: #fff; }
+        .checkin-btn:active { transform: scale(0.95); }
         .task-item {
             display: flex; align-items: center; gap: 12px;
             padding: 12px 14px; background: var(--s1); border-radius: 12px;
@@ -711,7 +720,21 @@
 
             const header = document.createElement('div');
             header.className = 'cat-header';
-            header.textContent = `${getLocIcon(loc)} ${loc}`;
+            const headerLabel = document.createElement('span');
+            headerLabel.textContent = `${getLocIcon(loc)} ${loc}`;
+            header.appendChild(headerLabel);
+            // Check In button — goes to AI tab and sends location message
+            if (loc !== 'Other') {
+                const checkinBtn = document.createElement('button');
+                checkinBtn.className = 'checkin-btn';
+                checkinBtn.textContent = '📍 Check In';
+                checkinBtn.addEventListener('click', (e) => {
+                    e.stopPropagation();
+                    switchTab('AI');
+                    sendMessage(`[Location: ${loc}] I'm at ${loc}`);
+                });
+                header.appendChild(checkinBtn);
+            }
             section.appendChild(header);
 
             // Incomplete first, then complete
