@@ -271,6 +271,55 @@
         }
         .btn-danger:hover { opacity: 0.9; }
 
+        /* ============= CALENDAR TAB ============= */
+        .calendar-scroll { flex: 1; overflow-y: auto; padding: 0 16px 16px; }
+        .cal-day {
+            margin-bottom: 20px;
+        }
+        .cal-day-header {
+            font-size: 15px; font-weight: 700; color: var(--tx);
+            padding: 10px 0 8px; border-bottom: 2px solid #667eea;
+            margin-bottom: 10px; display: flex; align-items: center; gap: 8px;
+        }
+        .cal-day-header .cal-date-icon {
+            width: 36px; height: 36px; border-radius: 10px;
+            background: linear-gradient(135deg, #667eea, #764ba2);
+            color: #fff; display: flex; align-items: center; justify-content: center;
+            font-size: 14px; font-weight: 800; flex-shrink: 0;
+        }
+        .cal-day-header .cal-date-text {
+            display: flex; flex-direction: column;
+        }
+        .cal-day-header .cal-date-text .cal-weekday {
+            font-size: 14px; font-weight: 700; color: var(--tx);
+        }
+        .cal-day-header .cal-date-text .cal-fulldate {
+            font-size: 12px; font-weight: 500; color: var(--tx3);
+        }
+        .cal-loc-group {
+            margin-bottom: 10px; background: var(--s1); border-radius: 12px;
+            padding: 12px 14px; box-shadow: 0 1px 3px rgba(0,0,0,0.04);
+        }
+        .cal-loc-header {
+            font-size: 13px; font-weight: 700; color: #764ba2;
+            margin-bottom: 6px; display: flex; align-items: center;
+            justify-content: space-between;
+        }
+        .cal-loc-header .cal-count {
+            font-size: 11px; font-weight: 600; color: var(--tx3);
+            background: var(--s2); padding: 2px 8px; border-radius: 10px;
+        }
+        .cal-task-item {
+            font-size: 13px; color: var(--tx2); padding: 3px 0 3px 6px;
+            border-left: 2px solid var(--grn); margin-bottom: 4px; margin-left: 2px;
+        }
+        .cal-empty {
+            text-align: center; padding: 60px 20px; color: var(--tx3);
+        }
+        .cal-empty .icon { font-size: 40px; margin-bottom: 8px; }
+        .cal-empty .msg { font-size: 15px; font-weight: 500; }
+        .cal-empty .sub { font-size: 13px; margin-top: 4px; }
+
         /* ============= BOTTOM NAV ============= */
         .bottom-nav {
             position: fixed; bottom: 0; left: 0; right: 0; height: 64px;
@@ -364,6 +413,11 @@
             </div>
         </div>
 
+        <!-- ============= CALENDAR TAB ============= -->
+        <div class="tab-panel" id="panelCalendar">
+            <div class="calendar-scroll" id="calendarContainer"></div>
+        </div>
+
         <!-- ============= SETTINGS TAB ============= -->
         <div class="tab-panel" id="panelSettings">
             <div class="settings-scroll">
@@ -403,6 +457,16 @@
                 <path d="M21 12v7a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11"></path>
             </svg>
             <span>Todo</span>
+        </button>
+        <button class="nav-item" data-tab="Calendar">
+            <svg class="nav-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                <rect x="3" y="4" width="18" height="18" rx="2" ry="2"></rect>
+                <line x1="16" y1="2" x2="16" y2="6"></line>
+                <line x1="8" y1="2" x2="8" y2="6"></line>
+                <line x1="3" y1="10" x2="21" y2="10"></line>
+                <path d="M8 14h.01M12 14h.01M16 14h.01M8 18h.01M12 18h.01"></path>
+            </svg>
+            <span>History</span>
         </button>
         <button class="nav-item" data-tab="Settings">
             <svg class="nav-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
@@ -447,9 +511,10 @@
     const titles = {
         AI: '<span class="title-icon">✨</span> AI Coach',
         Todo: '<span class="title-icon">✅</span> My Tasks',
+        Calendar: '<span class="title-icon">📅</span> History',
         Settings: '<span class="title-icon">⚙️</span> Settings'
     };
-    const titleClasses = { AI: '', Todo: 'todo-title', Settings: 'settings-title' };
+    const titleClasses = { AI: '', Todo: 'todo-title', Calendar: '', Settings: 'settings-title' };
     const LOC_ICONS = {
         'Costco': '🛒', 'Supermarket': '🛒', 'Grocery Store': '🛒', 'Walmart': '🛒', 'Target': '🎯',
         'Whole Foods': '🥦', 'Trader Joes': '🛒',
@@ -510,6 +575,7 @@
         document.getElementById('jokeBanner').style.display = (tab === 'AI' || tab === 'Todo') ? 'flex' : 'none';
 
         if (tab === 'Todo') loadTasks();
+        if (tab === 'Calendar') loadHistory();
     }
 
     // ============================================================================
@@ -939,6 +1005,106 @@
         modal.classList.remove('show');
         btn.disabled = false; btn.textContent = 'Delete';
     });
+
+    // ============================================================================
+    // CALENDAR / HISTORY
+    // ============================================================================
+    const calendarContainer = document.getElementById('calendarContainer');
+
+    async function loadHistory() {
+        try {
+            const data = await fetch('/api/tasks/history').then(r => r.json());
+            renderHistory(data.tasks || []);
+        } catch (err) {
+            console.error('Failed to load history:', err);
+        }
+    }
+
+    function renderHistory(tasks) {
+        if (!tasks || tasks.length === 0) {
+            calendarContainer.innerHTML = `
+                <div class="cal-empty">
+                    <div class="icon">📅</div>
+                    <div class="msg">No completed tasks yet</div>
+                    <div class="sub">Check off tasks and they'll show up here grouped by day and location</div>
+                </div>`;
+            return;
+        }
+
+        // Group by day, then by location
+        const dayGroups = {};
+        tasks.forEach(t => {
+            const d = new Date(t.CompletedDate);
+            const dayKey = d.toISOString().split('T')[0]; // YYYY-MM-DD
+            if (!dayGroups[dayKey]) dayGroups[dayKey] = {};
+            const loc = t.Location || 'Other';
+            if (!dayGroups[dayKey][loc]) dayGroups[dayKey][loc] = [];
+            dayGroups[dayKey][loc].push(t);
+        });
+
+        calendarContainer.innerHTML = '';
+
+        // Sort days descending (most recent first)
+        const sortedDays = Object.keys(dayGroups).sort((a, b) => b.localeCompare(a));
+
+        sortedDays.forEach(dayKey => {
+            const dayDiv = document.createElement('div');
+            dayDiv.className = 'cal-day';
+
+            const dateObj = new Date(dayKey + 'T12:00:00');
+            const weekday = dateObj.toLocaleDateString('en-US', { weekday: 'long' });
+            const monthDay = dateObj.toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
+            const dayNum = dateObj.getDate();
+
+            // Check if today or yesterday
+            const today = new Date(); today.setHours(0,0,0,0);
+            const yesterday = new Date(today); yesterday.setDate(yesterday.getDate() - 1);
+            const taskDate = new Date(dayKey + 'T00:00:00');
+            let label = weekday;
+            if (taskDate.getTime() === today.getTime()) label = 'Today';
+            else if (taskDate.getTime() === yesterday.getTime()) label = 'Yesterday';
+
+            const header = document.createElement('div');
+            header.className = 'cal-day-header';
+            header.innerHTML = `
+                <div class="cal-date-icon">${dayNum}</div>
+                <div class="cal-date-text">
+                    <span class="cal-weekday">${label}</span>
+                    <span class="cal-fulldate">${monthDay}</span>
+                </div>`;
+            dayDiv.appendChild(header);
+
+            // Sort locations alphabetically, "Other" last
+            const locs = Object.keys(dayGroups[dayKey]).sort((a, b) => {
+                if (a === 'Other') return 1;
+                if (b === 'Other') return -1;
+                return a.localeCompare(b);
+            });
+
+            locs.forEach(loc => {
+                const items = dayGroups[dayKey][loc];
+                const locGroup = document.createElement('div');
+                locGroup.className = 'cal-loc-group';
+
+                locGroup.innerHTML = `
+                    <div class="cal-loc-header">
+                        <span>${getLocIcon(loc)} ${loc}</span>
+                        <span class="cal-count">${items.length} item${items.length !== 1 ? 's' : ''}</span>
+                    </div>`;
+
+                items.forEach(task => {
+                    const taskDiv = document.createElement('div');
+                    taskDiv.className = 'cal-task-item';
+                    taskDiv.textContent = task.Title;
+                    locGroup.appendChild(taskDiv);
+                });
+
+                dayDiv.appendChild(locGroup);
+            });
+
+            calendarContainer.appendChild(dayDiv);
+        });
+    }
 
     // ============================================================================
     // BOOT

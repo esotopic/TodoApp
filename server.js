@@ -628,10 +628,29 @@ app.put('/api/tasks/:id/toggle', requireAuth, async (req, res) => {
         await db.request()
             .input('id', sql.Int, req.params.id)
             .input('userId', sql.Int, req.session.user.id)
-            .query('UPDATE Todo_Tasks SET IsComplete = CASE WHEN IsComplete = 1 THEN 0 ELSE 1 END, UpdatedDate = GETUTCDATE() WHERE Id = @id AND UserId = @userId');
+            .query('UPDATE Todo_Tasks SET IsComplete = CASE WHEN IsComplete = 1 THEN 0 ELSE 1 END, CompletedDate = CASE WHEN IsComplete = 0 THEN GETUTCDATE() ELSE NULL END, UpdatedDate = GETUTCDATE() WHERE Id = @id AND UserId = @userId');
         res.json({ success: true });
     } catch (err) {
         console.error('Toggle error:', err);
+        res.status(500).json({ error: 'Server error' });
+    }
+});
+
+// ============================================================================
+// CALENDAR — completed tasks history
+// ============================================================================
+app.get('/api/tasks/history', requireAuth, async (req, res) => {
+    try {
+        const db = await getPool();
+        const result = await db.request()
+            .input('userId', sql.Int, req.session.user.id)
+            .query(`SELECT Id, Title, Location, CompletedDate
+                    FROM Todo_Tasks
+                    WHERE UserId = @userId AND IsComplete = 1 AND CompletedDate IS NOT NULL
+                    ORDER BY CompletedDate DESC`);
+        res.json({ tasks: result.recordset });
+    } catch (err) {
+        console.error('History error:', err);
         res.status(500).json({ error: 'Server error' });
     }
 });
