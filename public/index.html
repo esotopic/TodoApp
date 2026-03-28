@@ -56,20 +56,26 @@
             font-weight: 700; color: var(--tx); letter-spacing: -0.02em; flex-shrink: 0;
         }
 
-        /* Category buttons — sticky above chat input */
-        .cat-buttons {
+        /* Location buttons — dynamic, sticky above chat input */
+        .loc-buttons {
             display: flex; gap: 8px; padding: 8px 16px 4px; flex-shrink: 0;
-            overflow-x: auto; background: var(--bg);
+            overflow-x: auto; background: var(--bg); scrollbar-width: none;
         }
-        .cat-btn {
-            flex: 1; min-width: 0; padding: 10px 8px; border-radius: 10px;
-            border: 2px solid var(--s3); background: var(--s1); color: var(--tx2);
-            font-size: 12px; font-weight: 600; text-transform: uppercase;
-            letter-spacing: 0.04em; cursor: pointer; transition: all 0.2s;
-            text-align: center; font-family: inherit;
+        .loc-buttons::-webkit-scrollbar { display: none; }
+        .loc-btn {
+            padding: 9px 14px; border-radius: 20px;
+            border: 2px solid var(--acc); background: var(--s1); color: var(--acc);
+            font-size: 12px; font-weight: 600;
+            letter-spacing: 0.02em; cursor: pointer; transition: all 0.2s;
+            text-align: center; font-family: inherit; white-space: nowrap;
+            flex-shrink: 0;
         }
-        .cat-btn.active { border-color: var(--acc); background: var(--acc); color: #fff; }
-        .cat-btn:hover:not(.active) { border-color: var(--brd); }
+        .loc-btn:hover { background: var(--acc); color: #fff; }
+        .loc-btn:active { transform: scale(0.95); }
+        .loc-empty {
+            font-size: 12px; color: var(--tx3); padding: 8px 0;
+            text-align: center; width: 100%; font-style: italic;
+        }
 
         /* Tab panels */
         .tab-panel { display: none; flex: 1; overflow: hidden; flex-direction: column; }
@@ -249,12 +255,9 @@
         <div class="tab-panel active" id="panelAI">
             <div class="chat-messages" id="chatMessages"></div>
             <div class="typing-indicator" id="typingIndicator">AI is thinking...</div>
-            <!-- Category buttons — sticky above chat input -->
-            <div class="cat-buttons" id="catButtons">
-                <button class="cat-btn" data-cat="Home">🏠 Home</button>
-                <button class="cat-btn" data-cat="Work">💼 Work</button>
-                <button class="cat-btn" data-cat="Health">💪 Health</button>
-                <button class="cat-btn" data-cat="Learning">📚 Learning</button>
+            <!-- Dynamic location buttons — "I'm at..." -->
+            <div class="loc-buttons" id="locButtons">
+                <span class="loc-empty">Complete onboarding to see your locations</span>
             </div>
             <div class="chat-input-row">
                 <input type="text" class="chat-input" id="chatInput" placeholder="Type a message..." autocomplete="off">
@@ -337,9 +340,19 @@
     // STATE
     // ============================================================================
     let currentTab = 'AI';
-    let selectedCategory = null;
     const CATEGORIES = ['Home', 'Work', 'Health', 'Learning'];
     const titles = { AI: 'AI COACH', Todo: 'TODO', Settings: 'SETTINGS' };
+    const LOC_ICONS = {
+        'Costco': '🛒', 'Supermarket': '🛒', 'Grocery Store': '🛒', 'Walmart': '🛒', 'Target': '🎯',
+        'Whole Foods': '🥦', 'Trader Joes': '🛒',
+        'Gym': '💪', 'Park': '🌳', 'Office': '💼', 'Home': '🏠',
+        'Library': '📚', 'Pharmacy': '💊', 'Doctor': '🏥', 'Bank': '🏦',
+        'Post Office': '📮', 'Dry Cleaning': '👔', 'School': '🎓', 'Online': '💻',
+        'default': '📍'
+    };
+    function getLocIcon(loc) {
+        return LOC_ICONS[loc] || LOC_ICONS['default'];
+    }
 
     // ============================================================================
     // JOKE BANNER
@@ -365,6 +378,7 @@
         }
         loadChat();
         loadTasks();
+        loadLocations();
     }
 
     // ============================================================================
@@ -389,25 +403,35 @@
     }
 
     // ============================================================================
-    // CATEGORY BUTTONS
+    // LOCATION BUTTONS — "I'm at..."
     // ============================================================================
-    document.querySelectorAll('.cat-btn').forEach(btn => {
-        btn.addEventListener('click', () => {
-            const cat = btn.dataset.cat;
-            if (selectedCategory === cat) {
-                // Deselect
-                selectedCategory = null;
-                btn.classList.remove('active');
-                chatInput.placeholder = 'Type a message...';
-            } else {
-                selectedCategory = cat;
-                document.querySelectorAll('.cat-btn').forEach(b => b.classList.remove('active'));
-                btn.classList.add('active');
-                chatInput.placeholder = `Add ${cat} tasks...`;
-                chatInput.focus();
-            }
+    async function loadLocations() {
+        try {
+            const data = await fetch('/api/locations').then(r => r.json());
+            renderLocButtons(data.locations || []);
+        } catch (err) {
+            console.error('Failed to load locations:', err);
+        }
+    }
+
+    function renderLocButtons(locations) {
+        const container = document.getElementById('locButtons');
+        container.innerHTML = '';
+        if (locations.length === 0) {
+            container.innerHTML = '<span class="loc-empty">Your task locations will appear here</span>';
+            return;
+        }
+        locations.forEach(loc => {
+            const btn = document.createElement('button');
+            btn.className = 'loc-btn';
+            btn.textContent = `${getLocIcon(loc)} ${loc}`;
+            btn.addEventListener('click', () => {
+                // Send "I'm at [Location]" to the AI
+                sendMessage(`[Location: ${loc}] I'm at ${loc}`);
+            });
+            container.appendChild(btn);
         });
-    });
+    }
 
     // ============================================================================
     // CHAT / AI
@@ -429,7 +453,13 @@
             data.messages.forEach(m => {
                 // Hide the auto-start trigger messages
                 if (m.role === 'user' && (m.content === 'Start' || m.content === 'Hi')) return;
-                addBubble(m.role, m.content);
+                // Strip [Category: X] and [Location: X] prefixes for display
+                let displayContent = m.content;
+                if (m.role === 'user') {
+                    displayContent = displayContent.replace(/^\[Category: [^\]]+\]\s*/, '');
+                    displayContent = displayContent.replace(/^\[Location: [^\]]+\]\s*/, '');
+                }
+                addBubble(m.role, displayContent);
             });
             scrollChat();
         } catch (err) {
@@ -502,13 +532,11 @@
     async function sendMessage(text) {
         if (!text.trim()) return;
 
-        // If a category is selected, prefix the message
         let msgToSend = text;
-        if (selectedCategory) {
-            msgToSend = `[Category: ${selectedCategory}] ${text}`;
-        }
+        // Show clean text in bubble (strip location prefix for display)
+        let displayText = text.replace(/^\[Location: [^\]]+\]\s*/, '');
 
-        addBubble('user', text);
+        addBubble('user', displayText);
         chatInput.value = '';
         chatSend.disabled = true;
         typingIndicator.classList.add('show');
@@ -540,6 +568,7 @@
 
             if (data.toolUsed) {
                 loadTasks();
+                loadLocations();
             }
         } catch (err) {
             typingIndicator.classList.remove('show');
@@ -660,8 +689,7 @@
             document.getElementById('resetModal').classList.remove('show');
             chatMessages.innerHTML = '';
             tasksContainer.innerHTML = '';
-            selectedCategory = null;
-            document.querySelectorAll('.cat-btn').forEach(b => b.classList.remove('active'));
+            renderLocButtons([]);
             switchTab('AI');
             showRandomJoke();
             startOnboarding();

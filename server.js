@@ -208,7 +208,7 @@ app.post('/api/chat', requireAuth, async (req, res) => {
         // Get existing tasks for context
         const tasksResult = await db.request()
             .input('userId', sql.Int, userId)
-            .query('SELECT Id, Title, Category, IsComplete FROM Todo_Tasks WHERE UserId = @userId ORDER BY SortOrder ASC');
+            .query('SELECT Id, Title, Category, Location, IsComplete FROM Todo_Tasks WHERE UserId = @userId ORDER BY SortOrder ASC');
         const existingTasks = tasksResult.recordset;
 
         // Build system prompt
@@ -228,7 +228,8 @@ app.post('/api/chat', requireAuth, async (req, res) => {
                                 type: 'object',
                                 properties: {
                                     title: { type: 'string', description: 'The task title' },
-                                    category: { type: 'string', description: 'Optional category like Work, Personal, Health, Learning, etc.' }
+                                    category: { type: 'string', description: 'One of: Home, Work, Health, Learning' },
+                                    location: { type: 'string', description: 'Where this task happens — e.g. Costco, Supermarket, Gym, Office, Home, Library, Pharmacy, Online. Be specific and consistent.' }
                                 },
                                 required: ['title']
                             }
@@ -271,8 +272,9 @@ app.post('/api/chat', requireAuth, async (req, res) => {
                         .input('userId', sql.Int, userId)
                         .input('title', sql.NVarChar, tasks[i].title)
                         .input('category', sql.NVarChar, tasks[i].category || null)
+                        .input('location', sql.NVarChar, tasks[i].location || null)
                         .input('sortOrder', sql.Int, i)
-                        .query('INSERT INTO Todo_Tasks (UserId, Title, Category, SortOrder) VALUES (@userId, @title, @category, @sortOrder)');
+                        .query('INSERT INTO Todo_Tasks (UserId, Title, Category, Location, SortOrder) VALUES (@userId, @title, @category, @location, @sortOrder)');
                 }
 
                 // Mark onboarding complete if indicated
@@ -335,7 +337,21 @@ function buildSystemPrompt(onboardingComplete, existingTasks, username) {
 
 IMPORTANT: The app has exactly 4 task categories: Home, Work, Health, Learning.
 Every task you create MUST have one of these 4 categories. No other categories allowed.
-The user can select a category button in the UI — if their message starts with [Category: X], they want tasks added to that specific category.`;
+
+LOCATIONS — CRITICAL:
+Every task MUST have a location field. The location is WHERE the task happens physically.
+Examples: "Costco", "Supermarket", "Gym", "Office", "Home", "Library", "Pharmacy", "Online", "Park", "Doctor", "Bank", "School".
+Be specific and consistent — use "Costco" not "costco" or "At Costco". Use singular proper nouns.
+The app shows location buttons at the bottom — when a user taps one, it means "I'm at this place right now, what should I do?"
+
+"I'M AT [LOCATION]" MESSAGES:
+If the user's message starts with [Location: X], they are telling you they are physically AT that location RIGHT NOW.
+Your job: Find ALL incomplete tasks at that location and give them a focused, actionable briefing:
+1. List every task for that location
+2. Suggest an efficient order to tackle them
+3. Add any helpful tips (e.g. "grab a cart first", "check your list")
+4. Be energetic and motivating — they're there and ready to go!
+Do NOT use the save_tasks tool for location messages — just advise them.`;
 
     const chipsInstruction = `
 
@@ -380,7 +396,7 @@ Rules:
     }
 
     const taskSummary = existingTasks.length > 0
-        ? `\nCurrent tasks:\n${existingTasks.map(t => `- [${t.IsComplete ? 'x' : ' '}] ${t.Title} (${t.Category || 'Home'})`).join('\n')}`
+        ? `\nCurrent tasks:\n${existingTasks.map(t => `- [${t.IsComplete ? 'x' : ' '}] ${t.Title} (${t.Category || 'Home'})${t.Location ? ' @ ' + t.Location : ''}`).join('\n')}`
         : '\nNo tasks yet.';
 
     return `You are a helpful AI task coach inside "1000 Problems Todo". The user's name is ${username}. Onboarding is complete.${taskSummary}
@@ -425,10 +441,24 @@ app.get('/api/tasks', requireAuth, async (req, res) => {
         const db = await getPool();
         const result = await db.request()
             .input('userId', sql.Int, req.session.user.id)
-            .query('SELECT Id, Title, Category, IsComplete, SortOrder FROM Todo_Tasks WHERE UserId = @userId ORDER BY SortOrder ASC');
+            .query('SELECT Id, Title, Category, Location, IsComplete, SortOrder FROM Todo_Tasks WHERE UserId = @userId ORDER BY SortOrder ASC');
         res.json({ tasks: result.recordset });
     } catch (err) {
         console.error('Tasks error:', err);
+        res.status(500).json({ error: 'Server error' });
+    }
+});
+
+// Get unique locations from user's incomplete tasks
+app.get('/api/locations', requireAuth, async (req, res) => {
+    try {
+        const db = await getPool();
+        const result = await db.request()
+            .input('userId', sql.Int, req.session.user.id)
+            .query('SELECT DISTINCT Location FROM Todo_Tasks WHERE UserId = @userId AND Location IS NOT NULL AND IsComplete = 0 ORDER BY Location');
+        res.json({ locations: result.recordset.map(r => r.Location) });
+    } catch (err) {
+        console.error('Locations error:', err);
         res.status(500).json({ error: 'Server error' });
     }
 });
