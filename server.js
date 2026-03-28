@@ -135,7 +135,7 @@ app.post('/api/chat/start', requireAuth, async (req, res) => {
 
         // Send a single user message to kick off the conversation
         const response = await anthropic.messages.create({
-            model: 'claude-sonnet-4-20250514',
+            model: 'claude-sonnet-4-6',
             max_tokens: 512,
             system: systemPrompt,
             messages: [{ role: 'user', content: 'Start' }]
@@ -241,7 +241,7 @@ app.post('/api/chat', requireAuth, async (req, res) => {
         ];
 
         const response = await anthropic.messages.create({
-            model: 'claude-sonnet-4-20250514',
+            model: 'claude-sonnet-4-6',
             max_tokens: 1024,
             system: systemPrompt,
             tools: tools,

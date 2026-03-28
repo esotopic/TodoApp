@@ -56,10 +56,10 @@
             font-weight: 700; color: var(--tx); letter-spacing: -0.02em; flex-shrink: 0;
         }
 
-        /* Category buttons */
+        /* Category buttons — sticky above chat input */
         .cat-buttons {
-            display: flex; gap: 8px; padding: 8px 16px; flex-shrink: 0;
-            overflow-x: auto;
+            display: flex; gap: 8px; padding: 8px 16px 4px; flex-shrink: 0;
+            overflow-x: auto; background: var(--bg);
         }
         .cat-btn {
             flex: 1; min-width: 0; padding: 10px 8px; border-radius: 10px;
@@ -231,18 +231,17 @@
 
         <div class="page-title" id="pageTitle">AI COACH</div>
 
-        <!-- Category buttons (visible on AI tab) -->
-        <div class="cat-buttons" id="catButtons">
-            <button class="cat-btn" data-cat="Home">🏠 Home</button>
-            <button class="cat-btn" data-cat="Work">💼 Work</button>
-            <button class="cat-btn" data-cat="Health">💪 Health</button>
-            <button class="cat-btn" data-cat="Learning">📚 Learning</button>
-        </div>
-
         <!-- ============= AI TAB ============= -->
         <div class="tab-panel active" id="panelAI">
             <div class="chat-messages" id="chatMessages"></div>
             <div class="typing-indicator" id="typingIndicator">AI is thinking...</div>
+            <!-- Category buttons — sticky above chat input -->
+            <div class="cat-buttons" id="catButtons">
+                <button class="cat-btn" data-cat="Home">🏠 Home</button>
+                <button class="cat-btn" data-cat="Work">💼 Work</button>
+                <button class="cat-btn" data-cat="Health">💪 Health</button>
+                <button class="cat-btn" data-cat="Learning">📚 Learning</button>
+            </div>
             <div class="chat-input-row">
                 <input type="text" class="chat-input" id="chatInput" placeholder="Type a message..." autocomplete="off">
                 <button class="chat-send" id="chatSend">
@@ -369,9 +368,7 @@
         document.querySelectorAll('.nav-item').forEach(n => n.classList.remove('active'));
         document.querySelector(`.nav-item[data-tab="${tab}"]`).classList.add('active');
 
-        // Show category buttons only on AI tab
-        document.getElementById('catButtons').style.display = tab === 'AI' ? 'flex' : 'none';
-        // Show joke on AI tab only
+        // Show joke on AI and Todo tabs only
         document.getElementById('jokeBanner').style.display = (tab === 'AI' || tab === 'Todo') ? 'flex' : 'none';
 
         if (tab === 'Todo') loadTasks();
@@ -415,7 +412,11 @@
                 startOnboarding();
                 return;
             }
-            data.messages.forEach(m => addBubble(m.role, m.content));
+            data.messages.forEach(m => {
+                // Hide the auto-start trigger messages
+                if (m.role === 'user' && (m.content === 'Start' || m.content === 'Hi')) return;
+                addBubble(m.role, m.content);
+            });
             scrollChat();
         } catch (err) {
             console.error('Failed to load chat:', err);
@@ -471,15 +472,19 @@
         showRandomJoke();
 
         try {
-            const data = await fetch('/api/chat', {
+            const resp = await fetch('/api/chat', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({ message: msgToSend })
-            }).then(r => r.json());
+            });
+            const data = await resp.json();
 
             typingIndicator.classList.remove('show');
 
-            if (data.reply) {
+            if (data.error) {
+                addBubble('assistant', '⚠️ ' + data.error);
+                scrollChat();
+            } else if (data.reply) {
                 addBubble('assistant', data.reply);
                 scrollChat();
             }
@@ -489,7 +494,7 @@
             }
         } catch (err) {
             typingIndicator.classList.remove('show');
-            addBubble('assistant', 'Sorry, something went wrong. Please try again.');
+            addBubble('assistant', '⚠️ Connection error: ' + err.message);
             scrollChat();
         }
 
