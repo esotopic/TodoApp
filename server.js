@@ -126,12 +126,13 @@ app.post('/api/chat/start', requireAuth, async (req, res) => {
             return res.json({ reply: null }); // Already has history
         }
 
-        // Get onboarding state
+        // Get onboarding state + profile
         const stateResult = await db.request().input('userId', sql.Int, userId)
-            .query('SELECT OnboardingComplete FROM Todo_UserState WHERE UserId = @userId');
+            .query('SELECT OnboardingComplete, ProfileInfo FROM Todo_UserState WHERE UserId = @userId');
         const onboardingComplete = stateResult.recordset.length > 0 && stateResult.recordset[0].OnboardingComplete;
+        const userProfile = stateResult.recordset.length > 0 ? stateResult.recordset[0].ProfileInfo : null;
 
-        const systemPrompt = buildSystemPrompt(onboardingComplete, [], req.session.user.username);
+        const systemPrompt = buildSystemPrompt(onboardingComplete, [], req.session.user.username, userProfile);
 
         // Send a single user message to kick off the conversation
         const response = await anthropic.messages.create({
@@ -199,11 +200,12 @@ app.post('/api/chat', requireAuth, async (req, res) => {
 
         const chatHistory = historyResult.recordset.map(r => ({ role: r.Role, content: r.Content }));
 
-        // Get onboarding state
+        // Get onboarding state + profile
         const stateResult = await db.request()
             .input('userId', sql.Int, userId)
-            .query('SELECT OnboardingComplete FROM Todo_UserState WHERE UserId = @userId');
+            .query('SELECT OnboardingComplete, ProfileInfo FROM Todo_UserState WHERE UserId = @userId');
         const onboardingComplete = stateResult.recordset.length > 0 && stateResult.recordset[0].OnboardingComplete;
+        const userProfile = stateResult.recordset.length > 0 ? stateResult.recordset[0].ProfileInfo : null;
 
         // Get existing tasks for context
         const tasksResult = await db.request()
@@ -212,10 +214,21 @@ app.post('/api/chat', requireAuth, async (req, res) => {
         const existingTasks = tasksResult.recordset;
 
         // Build system prompt
-        const systemPrompt = buildSystemPrompt(onboardingComplete, existingTasks, req.session.user.username);
+        const systemPrompt = buildSystemPrompt(onboardingComplete, existingTasks, req.session.user.username, userProfile);
 
         // Call Claude with tool use
         const tools = [
+            {
+                name: 'save_user_profile',
+                description: 'Save information about the user gathered during onboarding — their job, lifestyle, household, priorities, preferred stores, routines, etc. This profile is used to personalize all future task suggestions.',
+                input_schema: {
+                    type: 'object',
+                    properties: {
+                        profile: { type: 'string', description: 'A comprehensive summary of everything learned about the user — their job/role, living situation, household members, fitness goals, preferred stores, daily routine, hobbies, priorities, etc. Write in 3rd person.' }
+                    },
+                    required: ['profile']
+                }
+            },
             {
                 name: 'save_tasks',
                 description: 'Save a list of todo tasks for the user. Use this when the user has confirmed their task list or when generating tasks from the onboarding conversation. Each task has a title and optional category.',
@@ -252,61 +265,85 @@ app.post('/api/chat', requireAuth, async (req, res) => {
             messages: chatHistory
         });
 
-        // Process response - handle tool use
+        // Process response - handle tool use (may have multiple tools)
         let assistantText = '';
         let toolUsed = false;
+        let currentResponse = response;
+        let currentMessages = [...chatHistory];
 
-        for (const block of response.content) {
-            if (block.type === 'text') {
-                assistantText += block.text;
-            } else if (block.type === 'tool_use' && block.name === 'save_tasks') {
-                toolUsed = true;
-                const { tasks, complete_onboarding } = block.input;
+        // Loop to handle chained tool calls
+        while (true) {
+            const toolResults = [];
+            let hasText = false;
 
-                // Clear existing tasks and save new ones
-                await db.request().input('userId', sql.Int, userId)
-                    .query('DELETE FROM Todo_Tasks WHERE UserId = @userId');
-
-                for (let i = 0; i < tasks.length; i++) {
-                    await db.request()
-                        .input('userId', sql.Int, userId)
-                        .input('title', sql.NVarChar, tasks[i].title)
-                        .input('category', sql.NVarChar, tasks[i].category || null)
-                        .input('location', sql.NVarChar, tasks[i].location || null)
-                        .input('sortOrder', sql.Int, i)
-                        .query('INSERT INTO Todo_Tasks (UserId, Title, Category, Location, SortOrder) VALUES (@userId, @title, @category, @location, @sortOrder)');
-                }
-
-                // Mark onboarding complete if indicated
-                if (complete_onboarding) {
+            for (const block of currentResponse.content) {
+                if (block.type === 'text') {
+                    assistantText += block.text;
+                    hasText = true;
+                } else if (block.type === 'tool_use' && block.name === 'save_user_profile') {
+                    // Save user profile
+                    const { profile } = block.input;
                     const existingState = await db.request().input('userId', sql.Int, userId)
                         .query('SELECT Id FROM Todo_UserState WHERE UserId = @userId');
                     if (existingState.recordset.length === 0) {
-                        await db.request().input('userId', sql.Int, userId)
-                            .query('INSERT INTO Todo_UserState (UserId, OnboardingComplete) VALUES (@userId, 1)');
+                        await db.request().input('userId', sql.Int, userId).input('profile', sql.NVarChar, profile)
+                            .query('INSERT INTO Todo_UserState (UserId, OnboardingComplete, ProfileInfo) VALUES (@userId, 0, @profile)');
                     } else {
-                        await db.request().input('userId', sql.Int, userId)
-                            .query('UPDATE Todo_UserState SET OnboardingComplete = 1, UpdatedDate = GETUTCDATE() WHERE UserId = @userId');
+                        await db.request().input('userId', sql.Int, userId).input('profile', sql.NVarChar, profile)
+                            .query('UPDATE Todo_UserState SET ProfileInfo = @profile, UpdatedDate = GETUTCDATE() WHERE UserId = @userId');
                     }
-                }
+                    toolResults.push({ type: 'tool_result', tool_use_id: block.id, content: 'Profile saved successfully.' });
+                } else if (block.type === 'tool_use' && block.name === 'save_tasks') {
+                    toolUsed = true;
+                    const { tasks, complete_onboarding } = block.input;
 
-                // Now send tool result back to get final text
-                const followUp = await anthropic.messages.create({
-                    model: 'claude-sonnet-4-6',
-                    max_tokens: 1024,
-                    system: systemPrompt,
-                    tools: tools,
-                    messages: [
-                        ...chatHistory,
-                        { role: 'assistant', content: response.content },
-                        { role: 'user', content: [{ type: 'tool_result', tool_use_id: block.id, content: `Saved ${tasks.length} tasks successfully.` }] }
-                    ]
-                });
+                    // Clear existing tasks and save new ones
+                    await db.request().input('userId', sql.Int, userId)
+                        .query('DELETE FROM Todo_Tasks WHERE UserId = @userId');
 
-                for (const b of followUp.content) {
-                    if (b.type === 'text') assistantText += b.text;
+                    for (let i = 0; i < tasks.length; i++) {
+                        await db.request()
+                            .input('userId', sql.Int, userId)
+                            .input('title', sql.NVarChar, tasks[i].title)
+                            .input('category', sql.NVarChar, tasks[i].category || null)
+                            .input('location', sql.NVarChar, tasks[i].location || null)
+                            .input('sortOrder', sql.Int, i)
+                            .query('INSERT INTO Todo_Tasks (UserId, Title, Category, Location, SortOrder) VALUES (@userId, @title, @category, @location, @sortOrder)');
+                    }
+
+                    // Mark onboarding complete if indicated
+                    if (complete_onboarding) {
+                        const existingState = await db.request().input('userId', sql.Int, userId)
+                            .query('SELECT Id FROM Todo_UserState WHERE UserId = @userId');
+                        if (existingState.recordset.length === 0) {
+                            await db.request().input('userId', sql.Int, userId)
+                                .query('INSERT INTO Todo_UserState (UserId, OnboardingComplete) VALUES (@userId, 1)');
+                        } else {
+                            await db.request().input('userId', sql.Int, userId)
+                                .query('UPDATE Todo_UserState SET OnboardingComplete = 1, UpdatedDate = GETUTCDATE() WHERE UserId = @userId');
+                        }
+                    }
+                    toolResults.push({ type: 'tool_result', tool_use_id: block.id, content: `Saved ${tasks.length} tasks successfully.` });
                 }
             }
+
+            // If no tool calls, we're done
+            if (toolResults.length === 0) break;
+
+            // Send tool results back and get follow-up
+            currentMessages = [
+                ...currentMessages,
+                { role: 'assistant', content: currentResponse.content },
+                { role: 'user', content: toolResults }
+            ];
+
+            currentResponse = await anthropic.messages.create({
+                model: 'claude-sonnet-4-6',
+                max_tokens: 1024,
+                system: systemPrompt,
+                tools: tools,
+                messages: currentMessages
+            });
         }
 
         // Parse chips from response
@@ -332,7 +369,7 @@ app.post('/api/chat', requireAuth, async (req, res) => {
     }
 });
 
-function buildSystemPrompt(onboardingComplete, existingTasks, username) {
+function buildSystemPrompt(onboardingComplete, existingTasks, username, userProfile) {
     const categoryNote = `
 
 IMPORTANT: The app has exactly 4 task categories: Home, Work, Health, Learning.
@@ -374,32 +411,36 @@ Rules for chips:
 - For onboarding: offer the 4 category areas as chips
 - After saving tasks: offer "Add more" | "Show my tasks" | category-specific options`;
 
+    const profileContext = userProfile ? `\n\nUSER PROFILE (use this to personalize everything):\n${userProfile}` : '';
+
     if (!onboardingComplete) {
         return `You are a friendly, focused AI task coach inside a Todo app called "1000 Problems Todo". The user's name is ${username}.
 
-This is an ONBOARDING conversation. Your goal is to learn about the user's priorities and generate a personalized task list across 4 life areas: Home, Work, Health, and Learning.
+This is an ONBOARDING conversation. Your goal is to learn about the user — who they are, their lifestyle, and priorities — then generate a personalized task list.
 
-If the user's first message is "Start", begin the onboarding directly — welcome them warmly and ask what they'd like to get organized first.
+If the user's first message is "Start", begin the onboarding directly — welcome them warmly and start getting to know them.
 
 Steps:
-1. FIRST MESSAGE: Welcome them by name and ask what area they'd like to tackle first — Home, Work, Health, or Learning?
-2. Ask 2-3 short follow-up questions (one at a time!) to understand their specific goals and priorities.
-3. After enough context (3-4 exchanges), use the save_tasks tool to generate 8-15 actionable tasks spread across the 4 categories. Set complete_onboarding to true.
-4. After saving, give a brief encouraging summary.
+1. FIRST MESSAGE: Welcome them by name. Ask them to tell you a bit about themselves — what do they do, what's their living situation, any big priorities right now?
+2. Ask 2-3 follow-up questions (one at a time!) to understand their specific goals, routine, and lifestyle. Examples: "Do you work from home or an office?", "Any fitness goals?", "What stores do you usually shop at?"
+3. Before generating tasks, use the save_user_profile tool to save everything you've learned about the user (job, lifestyle, household, priorities, preferences, routines, stores they shop at, etc.)
+4. Then use the save_tasks tool to generate 8-15 actionable tasks spread across the 4 categories, personalized based on what you learned. Set complete_onboarding to true.
+5. After saving, give a brief encouraging summary.
 
 Rules:
 - Keep responses SHORT (2-3 sentences max)
 - Be warm but efficient
 - Ask ONE question at a time
 - Generate practical, specific tasks (not vague ones)
-- Include a mix of quick wins and bigger goals${categoryNote}${chipsInstruction}`;
+- Include a mix of quick wins and bigger goals
+- ALWAYS use save_user_profile before save_tasks during onboarding${categoryNote}${chipsInstruction}`;
     }
 
     const taskSummary = existingTasks.length > 0
         ? `\nCurrent tasks:\n${existingTasks.map(t => `- [${t.IsComplete ? 'x' : ' '}] ${t.Title} (${t.Category || 'Home'})${t.Location ? ' @ ' + t.Location : ''}`).join('\n')}`
         : '\nNo tasks yet.';
 
-    return `You are a helpful AI task coach inside "1000 Problems Todo". The user's name is ${username}. Onboarding is complete.${taskSummary}
+    return `You are a helpful AI task coach inside "1000 Problems Todo". The user's name is ${username}. Onboarding is complete.${profileContext}${taskSummary}
 
 You can help the user:
 - Add new tasks (use save_tasks tool — include ALL existing tasks plus new ones)
@@ -409,7 +450,7 @@ You can help the user:
 
 If the user's message starts with [Category: X], they selected that category button and want to add tasks specifically to that section.
 
-When modifying tasks, always use the save_tasks tool with the COMPLETE updated list (existing + changes). Keep responses brief and actionable.${categoryNote}${chipsInstruction}`;
+When modifying tasks, always use the save_tasks tool with the COMPLETE updated list (existing + changes). Keep responses brief and actionable. Use the user profile to personalize task suggestions — reference their stores, routines, lifestyle.${categoryNote}${chipsInstruction}`;
 }
 
 // Parse suggestion chips from AI response
@@ -441,7 +482,7 @@ app.get('/api/tasks', requireAuth, async (req, res) => {
         const db = await getPool();
         const result = await db.request()
             .input('userId', sql.Int, req.session.user.id)
-            .query('SELECT Id, Title, Category, Location, IsComplete, SortOrder FROM Todo_Tasks WHERE UserId = @userId ORDER BY SortOrder ASC');
+            .query('SELECT Id, Title, Category, Location, DueDate, IsComplete, SortOrder FROM Todo_Tasks WHERE UserId = @userId ORDER BY SortOrder ASC');
         res.json({ tasks: result.recordset });
     } catch (err) {
         console.error('Tasks error:', err);
@@ -459,6 +500,36 @@ app.get('/api/locations', requireAuth, async (req, res) => {
         res.json({ locations: result.recordset.map(r => r.Location) });
     } catch (err) {
         console.error('Locations error:', err);
+        res.status(500).json({ error: 'Server error' });
+    }
+});
+
+// Manual task creation
+app.post('/api/tasks', requireAuth, async (req, res) => {
+    try {
+        const { title, location, dueDate } = req.body;
+        if (!title || !title.trim()) return res.status(400).json({ error: 'Title required' });
+
+        const db = await getPool();
+        const userId = req.session.user.id;
+
+        // Get max sort order
+        const maxResult = await db.request()
+            .input('userId', sql.Int, userId)
+            .query('SELECT ISNULL(MAX(SortOrder), -1) + 1 as nextOrder FROM Todo_Tasks WHERE UserId = @userId');
+        const nextOrder = maxResult.recordset[0].nextOrder;
+
+        await db.request()
+            .input('userId', sql.Int, userId)
+            .input('title', sql.NVarChar, title.trim())
+            .input('location', sql.NVarChar, location ? location.trim() : null)
+            .input('dueDate', sql.Date, dueDate || null)
+            .input('sortOrder', sql.Int, nextOrder)
+            .query('INSERT INTO Todo_Tasks (UserId, Title, Location, DueDate, SortOrder) VALUES (@userId, @title, @location, @dueDate, @sortOrder)');
+
+        res.json({ success: true });
+    } catch (err) {
+        console.error('Create task error:', err);
         res.status(500).json({ error: 'Server error' });
     }
 });
