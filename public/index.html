@@ -146,8 +146,8 @@
 <body>
     <main class="page-container">
         <div class="top-bar">
-            <span class="user">angel</span>
-            <a href="#" class="signout">Sign out</a>
+            <span class="user" id="username"></span>
+            <a href="/logout" class="signout">Sign out</a>
         </div>
 
         <div class="page-title">TODO</div>
@@ -187,5 +187,10 @@
             <span class="nav-label">Settings</span>
         </a>
     </nav>
+    <script>
+        fetch('/api/me').then(r => r.json()).then(d => {
+            document.getElementById('username').textContent = d.username;
+        }).catch(() => { window.location.href = '/login'; });
+    </script>
 </body>
 </html>

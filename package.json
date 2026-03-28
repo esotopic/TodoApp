@@ -11,6 +11,8 @@
   "author": "",
   "license": "ISC",
   "dependencies": {
-    "express": "^5.2.1"
+    "express": "^5.2.1",
+    "express-session": "^1.19.0",
+    "mssql": "^12.2.1"
   }
 }
