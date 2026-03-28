@@ -9,138 +9,187 @@
     <meta name="apple-mobile-web-app-title" content="Todo">
     <title>Todo</title>
     <style>
-        /* ============================================================================
-           COLOR VARIABLES - matching RubberJoints design system
-           ============================================================================ */
         :root {
-            --bg: #f5f5f7;
-            --s1: #ffffff;
-            --s2: #f0f0f3;
-            --s3: #e5e5ea;
-            --brd: #d1d1d6;
-            --tx: #1c1c1e;
-            --tx2: #636366;
-            --tx3: #8e8e93;
-            --acc: #4a6cf7;
-            --grn: #34c759;
-            --org: #ff9500;
-            --red: #ff3b30;
-            --pur: #af52de;
-            --yel: #ffcc00;
+            --bg: #f5f5f7; --s1: #ffffff; --s2: #f0f0f3; --s3: #e5e5ea;
+            --brd: #d1d1d6; --tx: #1c1c1e; --tx2: #636366; --tx3: #8e8e93;
+            --acc: #4a6cf7; --grn: #34c759; --org: #ff9500; --red: #ff3b30;
+            --pur: #af52de; --yel: #ffcc00;
         }
-
-        /* ============================================================================
-           RESET + BASE
-           ============================================================================ */
         * { margin: 0; padding: 0; box-sizing: border-box; }
         html, body { height: 100%; width: 100%; }
         body {
-            background-color: var(--bg);
-            color: var(--tx);
+            background-color: var(--bg); color: var(--tx);
             font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Helvetica Neue', sans-serif;
-            font-size: 15px;
-            line-height: 1.5;
+            font-size: 15px; line-height: 1.5;
             -webkit-font-smoothing: antialiased;
-            -moz-osx-font-smoothing: grayscale;
         }
-
-        ::-webkit-scrollbar { width: 6px; height: 6px; }
+        ::-webkit-scrollbar { width: 6px; }
         ::-webkit-scrollbar-track { background: transparent; }
         ::-webkit-scrollbar-thumb { background: var(--s3); border-radius: 3px; }
-        ::-webkit-scrollbar-thumb:hover { background: var(--brd); }
 
-        /* ============================================================================
-           APP SHELL
-           ============================================================================ */
         .page-container {
-            max-width: 480px;
-            margin: 0 auto;
-            min-height: 100vh;
-            background: var(--bg);
-            padding-bottom: calc(64px + env(safe-area-inset-bottom));
+            max-width: 480px; margin: 0 auto; min-height: 100vh;
+            background: var(--bg); display: flex; flex-direction: column;
         }
 
-        /* ============================================================================
-           TOP BAR
-           ============================================================================ */
+        /* Top bar */
         .top-bar {
-            display: flex;
-            justify-content: space-between;
-            align-items: center;
-            padding: 8px 16px 0;
+            display: flex; justify-content: space-between; align-items: center;
+            padding: 8px 16px 0; flex-shrink: 0;
         }
         .top-bar .user { color: var(--tx2); font-size: 0.8rem; }
         .top-bar .signout { color: var(--tx2); font-size: 0.8rem; text-decoration: none; }
 
-        /* ============================================================================
-           PAGE TITLE
-           ============================================================================ */
+        /* Page title */
         .page-title {
-            text-align: center;
-            padding: 24px 16px 16px;
-            font-size: 28px;
-            font-weight: 700;
-            color: var(--tx);
-            letter-spacing: -0.02em;
+            text-align: center; padding: 16px 16px 12px; font-size: 28px;
+            font-weight: 700; color: var(--tx); letter-spacing: -0.02em; flex-shrink: 0;
         }
 
-        /* ============================================================================
-           CONTENT AREA
-           ============================================================================ */
-        .content {
-            padding: 0 16px;
-        }
+        /* Tab panels */
+        .tab-panel { display: none; flex: 1; overflow: hidden; flex-direction: column; }
+        .tab-panel.active { display: flex; }
 
+        /* ============= AI TAB ============= */
+        .chat-messages {
+            flex: 1; overflow-y: auto; padding: 0 16px 16px;
+        }
+        .chat-bubble {
+            max-width: 85%; margin-bottom: 12px; padding: 12px 16px;
+            border-radius: 18px; font-size: 14px; line-height: 1.5;
+            word-wrap: break-word; white-space: pre-wrap;
+        }
+        .chat-bubble.assistant {
+            background: var(--s1); color: var(--tx); border-bottom-left-radius: 6px;
+            box-shadow: 0 1px 4px rgba(0,0,0,0.06); align-self: flex-start;
+        }
+        .chat-bubble.user {
+            background: var(--acc); color: #fff; border-bottom-right-radius: 6px;
+            margin-left: auto;
+        }
+        .chat-input-row {
+            display: flex; gap: 8px; padding: 12px 16px;
+            background: var(--s1); border-top: 1px solid var(--brd); flex-shrink: 0;
+        }
+        .chat-input {
+            flex: 1; padding: 10px 14px; font-size: 15px;
+            border: 2px solid var(--s3); border-radius: 24px;
+            background: var(--bg); color: var(--tx); outline: none;
+            font-family: inherit; resize: none;
+        }
+        .chat-input:focus { border-color: var(--acc); }
+        .chat-send {
+            width: 42px; height: 42px; border-radius: 50%;
+            background: var(--acc); border: none; cursor: pointer;
+            display: flex; align-items: center; justify-content: center;
+            flex-shrink: 0; transition: opacity 0.2s;
+        }
+        .chat-send:disabled { opacity: 0.4; cursor: default; }
+        .chat-send svg { width: 20px; height: 20px; }
+        .typing-indicator {
+            display: none; padding: 12px 16px; color: var(--tx3); font-size: 13px;
+            font-style: italic;
+        }
+        .typing-indicator.show { display: block; }
+
+        /* ============= TODO TAB ============= */
+        .tasks-container { flex: 1; overflow-y: auto; padding: 0 16px 16px; }
+        .task-item {
+            display: flex; align-items: center; gap: 12px;
+            padding: 14px 16px; background: var(--s1); border-radius: 12px;
+            margin-bottom: 8px; box-shadow: 0 1px 3px rgba(0,0,0,0.04);
+            cursor: pointer; transition: opacity 0.2s;
+        }
+        .task-item.complete { opacity: 0.5; }
+        .task-check {
+            width: 24px; height: 24px; border-radius: 50%;
+            border: 2px solid var(--brd); display: flex;
+            align-items: center; justify-content: center; flex-shrink: 0;
+            transition: all 0.2s;
+        }
+        .task-item.complete .task-check {
+            background: var(--grn); border-color: var(--grn);
+        }
+        .task-check svg { width: 14px; height: 14px; display: none; }
+        .task-item.complete .task-check svg { display: block; }
+        .task-info { flex: 1; min-width: 0; }
+        .task-title { font-size: 15px; font-weight: 500; color: var(--tx); }
+        .task-item.complete .task-title { text-decoration: line-through; color: var(--tx3); }
+        .task-category {
+            font-size: 11px; font-weight: 600; color: var(--acc);
+            text-transform: uppercase; letter-spacing: 0.04em; margin-top: 2px;
+        }
         .empty-state {
-            text-align: center;
-            padding: 60px 20px;
-            color: var(--tx3);
+            text-align: center; padding: 60px 20px; color: var(--tx3);
         }
         .empty-state .icon { font-size: 48px; margin-bottom: 12px; }
         .empty-state .msg { font-size: 15px; font-weight: 500; }
-        .empty-state .sub { font-size: 13px; margin-top: 4px; color: var(--tx3); }
+        .empty-state .sub { font-size: 13px; margin-top: 4px; }
 
-        /* ============================================================================
-           BOTTOM NAVIGATION - matching RubberJoints exactly
-           ============================================================================ */
+        /* ============= SETTINGS TAB ============= */
+        .settings-container { flex: 1; overflow-y: auto; padding: 0 16px 16px; }
+        .settings-section {
+            background: var(--s1); border-radius: 12px; padding: 20px;
+            box-shadow: 0 1px 3px rgba(0,0,0,0.04); margin-bottom: 16px;
+        }
+        .settings-section h3 {
+            font-size: 13px; font-weight: 600; color: var(--tx3);
+            text-transform: uppercase; letter-spacing: 0.04em; margin-bottom: 16px;
+        }
+        .settings-item {
+            display: flex; justify-content: space-between; align-items: center;
+            padding: 12px 0; border-bottom: 1px solid var(--s2);
+        }
+        .settings-item:last-child { border-bottom: none; }
+        .settings-label { font-size: 15px; color: var(--tx); }
+        .settings-value { font-size: 14px; color: var(--tx3); }
+        .btn-danger {
+            width: 100%; padding: 14px; font-size: 16px; font-weight: 600;
+            background: var(--red); color: #fff; border: none; border-radius: 12px;
+            cursor: pointer; transition: opacity 0.2s; font-family: inherit;
+        }
+        .btn-danger:hover { opacity: 0.9; }
+        .btn-danger:disabled { opacity: 0.5; cursor: default; }
+
+        /* ============= BOTTOM NAV ============= */
         .bottom-nav {
-            position: fixed;
-            bottom: 0;
-            left: 0;
-            right: 0;
-            height: 64px;
+            position: fixed; bottom: 0; left: 0; right: 0; height: 64px;
             padding-bottom: env(safe-area-inset-bottom);
-            background-color: var(--s1);
-            border-top: 1px solid var(--brd);
-            display: flex;
-            justify-content: space-around;
-            align-items: center;
-            z-index: 100;
-            max-width: 480px;
-            margin: 0 auto;
+            background-color: var(--s1); border-top: 1px solid var(--brd);
+            display: flex; justify-content: space-around; align-items: center;
+            z-index: 100; max-width: 480px; margin: 0 auto;
         }
-
         .nav-item {
-            display: flex;
-            flex-direction: column;
-            align-items: center;
-            justify-content: center;
-            gap: 4px;
-            padding: 8px 12px;
-            background: none;
-            border: none;
-            color: var(--tx3);
-            cursor: pointer;
-            font-size: 11px;
-            font-weight: 500;
-            text-transform: uppercase;
-            letter-spacing: 0.5px;
-            transition: color 150ms ease;
-            text-decoration: none;
+            display: flex; flex-direction: column; align-items: center;
+            justify-content: center; gap: 4px; padding: 8px 12px;
+            background: none; border: none; color: var(--tx3); cursor: pointer;
+            font-size: 11px; font-weight: 500; text-transform: uppercase;
+            letter-spacing: 0.5px; transition: color 150ms ease; text-decoration: none;
         }
-
         .nav-item.active { color: var(--acc); }
         .nav-item .nav-icon { width: 24px; height: 24px; }
+
+        /* Confirm dialog */
+        .modal-overlay {
+            display: none; position: fixed; top: 0; left: 0; right: 0; bottom: 0;
+            background: rgba(0,0,0,0.4); z-index: 200;
+            align-items: center; justify-content: center;
+        }
+        .modal-overlay.show { display: flex; }
+        .modal-box {
+            background: var(--s1); border-radius: 16px; padding: 24px;
+            max-width: 320px; width: 90%; text-align: center;
+            box-shadow: 0 8px 32px rgba(0,0,0,0.15);
+        }
+        .modal-box h3 { font-size: 18px; margin-bottom: 8px; }
+        .modal-box p { font-size: 14px; color: var(--tx2); margin-bottom: 20px; }
+        .modal-actions { display: flex; gap: 12px; }
+        .modal-actions button {
+            flex: 1; padding: 12px; border-radius: 10px; border: none;
+            font-size: 15px; font-weight: 600; cursor: pointer; font-family: inherit;
+        }
+        .modal-cancel { background: var(--s2); color: var(--tx); }
+        .modal-confirm { background: var(--red); color: #fff; }
     </style>
 </head>
 <body>
@@ -150,33 +199,66 @@
             <a href="/logout" class="signout">Sign out</a>
         </div>
 
-        <div class="page-title">TODO</div>
+        <div class="page-title" id="pageTitle">AI COACH</div>
 
-        <div class="content">
-            <div class="empty-state">
-                <div class="icon">✅</div>
-                <div class="msg">Your task list is empty</div>
-                <div class="sub">Tasks will appear here</div>
+        <!-- ============= AI TAB ============= -->
+        <div class="tab-panel active" id="panelAI">
+            <div class="chat-messages" id="chatMessages"></div>
+            <div class="typing-indicator" id="typingIndicator">AI is thinking...</div>
+            <div class="chat-input-row">
+                <input type="text" class="chat-input" id="chatInput" placeholder="Type a message..." autocomplete="off">
+                <button class="chat-send" id="chatSend">
+                    <svg viewBox="0 0 24 24" fill="white" stroke="none"><path d="M2.01 21L23 12 2.01 3 2 10l15 2-15 2z"/></svg>
+                </button>
+            </div>
+        </div>
+
+        <!-- ============= TODO TAB ============= -->
+        <div class="tab-panel" id="panelTodo">
+            <div class="tasks-container" id="tasksContainer"></div>
+        </div>
+
+        <!-- ============= SETTINGS TAB ============= -->
+        <div class="tab-panel" id="panelSettings">
+            <div class="settings-container">
+                <div class="settings-section">
+                    <h3>Account</h3>
+                    <div class="settings-item">
+                        <span class="settings-label">Username</span>
+                        <span class="settings-value" id="settingsUsername"></span>
+                    </div>
+                    <div class="settings-item">
+                        <span class="settings-label">App</span>
+                        <span class="settings-value">1000 Problems Todo</span>
+                    </div>
+                </div>
+                <div class="settings-section">
+                    <h3>Danger Zone</h3>
+                    <p style="font-size:13px;color:var(--tx3);margin-bottom:16px;">
+                        This will delete all your tasks, chat history, and reset the app back to onboarding.
+                    </p>
+                    <button class="btn-danger" id="resetBtn">Reset App</button>
+                </div>
             </div>
         </div>
     </main>
 
     <nav class="bottom-nav">
-        <a href="#" class="nav-item active">
-            <svg class="nav-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                <path d="M9 11l3 3L22 4"></path>
-                <path d="M21 12v7a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11"></path>
-            </svg>
-            <span class="nav-label">Tasks</span>
-        </a>
-        <a href="#" class="nav-item">
+        <button class="nav-item active" data-tab="AI">
             <svg class="nav-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
                 <path d="M12 2L9 7l-5 1 3.5 3.5L7 17l5-2.5L17 17l-.5-5.5L20 8l-5-1z"></path>
                 <circle cx="12" cy="9" r="1" fill="currentColor" stroke="none"></circle>
             </svg>
-            <span class="nav-label">AI</span>
-        </a>
-        <a href="#" class="nav-item">
+            <span>AI</span>
+        </button>
+        <button class="nav-item" data-tab="Todo">
+            <svg class="nav-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                <path d="M9 11l3 3L22 4"></path>
+                <path d="M21 12v7a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11"></path>
+            </svg>
+            <span>Todo</span>
+        </button>
+        <button class="nav-item" data-tab="Settings">
             <svg class="nav-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
                 <circle cx="12" cy="12" r="3"></circle>
                 <path d="M12 1v6m0 6v6"></path>
@@ -184,13 +266,250 @@
                 <path d="M1 12h6m6 0h6"></path>
                 <path d="M4.22 19.78l4.24-4.24m5.08-5.08l4.24-4.24"></path>
             </svg>
-            <span class="nav-label">Settings</span>
-        </a>
+            <span>Settings</span>
+        </button>
     </nav>
+
+    <!-- Reset confirmation modal -->
+    <div class="modal-overlay" id="resetModal">
+        <div class="modal-box">
+            <h3>Reset App?</h3>
+            <p>This will delete all your tasks, chat history, and start fresh with onboarding.</p>
+            <div class="modal-actions">
+                <button class="modal-cancel" id="resetCancel">Cancel</button>
+                <button class="modal-confirm" id="resetConfirm">Reset</button>
+            </div>
+        </div>
+    </div>
+
     <script>
-        fetch('/api/me').then(r => r.json()).then(d => {
-            document.getElementById('username').textContent = d.username;
-        }).catch(() => { window.location.href = '/login'; });
+    // ============================================================================
+    // STATE
+    // ============================================================================
+    let currentTab = 'AI';
+    const titles = { AI: 'AI COACH', Todo: 'TODO', Settings: 'SETTINGS' };
+
+    // ============================================================================
+    // INIT
+    // ============================================================================
+    async function init() {
+        try {
+            const me = await fetch('/api/me').then(r => r.json());
+            document.getElementById('username').textContent = me.username;
+            document.getElementById('settingsUsername').textContent = me.username;
+        } catch {
+            window.location.href = '/login';
+            return;
+        }
+
+        // Load chat history
+        loadChat();
+        // Load tasks
+        loadTasks();
+    }
+
+    // ============================================================================
+    // TAB NAVIGATION
+    // ============================================================================
+    document.querySelectorAll('.nav-item').forEach(btn => {
+        btn.addEventListener('click', () => {
+            const tab = btn.dataset.tab;
+            switchTab(tab);
+        });
+    });
+
+    function switchTab(tab) {
+        currentTab = tab;
+        document.getElementById('pageTitle').textContent = titles[tab];
+
+        document.querySelectorAll('.tab-panel').forEach(p => p.classList.remove('active'));
+        document.getElementById('panel' + tab).classList.add('active');
+
+        document.querySelectorAll('.nav-item').forEach(n => n.classList.remove('active'));
+        document.querySelector(`.nav-item[data-tab="${tab}"]`).classList.add('active');
+
+        if (tab === 'Todo') loadTasks();
+    }
+
+    // ============================================================================
+    // CHAT / AI
+    // ============================================================================
+    const chatMessages = document.getElementById('chatMessages');
+    const chatInput = document.getElementById('chatInput');
+    const chatSend = document.getElementById('chatSend');
+    const typingIndicator = document.getElementById('typingIndicator');
+
+    async function loadChat() {
+        try {
+            const data = await fetch('/api/chat').then(r => r.json());
+            chatMessages.innerHTML = '';
+            if (data.messages.length === 0) {
+                // No chat yet — send empty greeting to trigger onboarding
+                sendMessage('Hi');
+                return;
+            }
+            data.messages.forEach(m => addBubble(m.role, m.content));
+            scrollChat();
+        } catch (err) {
+            console.error('Failed to load chat:', err);
+        }
+    }
+
+    function addBubble(role, text) {
+        const div = document.createElement('div');
+        div.className = 'chat-bubble ' + role;
+        div.textContent = text;
+        chatMessages.appendChild(div);
+    }
+
+    function scrollChat() {
+        chatMessages.scrollTop = chatMessages.scrollHeight;
+    }
+
+    async function sendMessage(text) {
+        if (!text.trim()) return;
+
+        addBubble('user', text);
+        chatInput.value = '';
+        chatSend.disabled = true;
+        typingIndicator.classList.add('show');
+        scrollChat();
+
+        try {
+            const data = await fetch('/api/chat', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ message: text })
+            }).then(r => r.json());
+
+            typingIndicator.classList.remove('show');
+
+            if (data.reply) {
+                addBubble('assistant', data.reply);
+                scrollChat();
+            }
+
+            if (data.toolUsed) {
+                // Tasks were saved — refresh if on todo tab
+                loadTasks();
+            }
+        } catch (err) {
+            typingIndicator.classList.remove('show');
+            addBubble('assistant', 'Sorry, something went wrong. Please try again.');
+            scrollChat();
+        }
+
+        chatSend.disabled = false;
+        chatInput.focus();
+    }
+
+    chatSend.addEventListener('click', () => sendMessage(chatInput.value));
+    chatInput.addEventListener('keydown', (e) => {
+        if (e.key === 'Enter' && !e.shiftKey) {
+            e.preventDefault();
+            sendMessage(chatInput.value);
+        }
+    });
+
+    // ============================================================================
+    // TASKS
+    // ============================================================================
+    const tasksContainer = document.getElementById('tasksContainer');
+
+    async function loadTasks() {
+        try {
+            const data = await fetch('/api/tasks').then(r => r.json());
+            renderTasks(data.tasks);
+        } catch (err) {
+            console.error('Failed to load tasks:', err);
+        }
+    }
+
+    function renderTasks(tasks) {
+        if (!tasks || tasks.length === 0) {
+            tasksContainer.innerHTML = `
+                <div class="empty-state">
+                    <div class="icon">💬</div>
+                    <div class="msg">No tasks yet</div>
+                    <div class="sub">Chat with AI to generate your task list</div>
+                </div>`;
+            return;
+        }
+
+        // Separate incomplete and complete
+        const incomplete = tasks.filter(t => !t.IsComplete);
+        const complete = tasks.filter(t => t.IsComplete);
+
+        tasksContainer.innerHTML = '';
+
+        [...incomplete, ...complete].forEach(task => {
+            const div = document.createElement('div');
+            div.className = 'task-item' + (task.IsComplete ? ' complete' : '');
+            div.innerHTML = `
+                <div class="task-check">
+                    <svg viewBox="0 0 24 24" fill="white" stroke="none"><path d="M9 16.17L4.83 12l-1.42 1.41L9 19 21 7l-1.41-1.41L9 16.17z"/></svg>
+                </div>
+                <div class="task-info">
+                    <div class="task-title">${escapeHtml(task.Title)}</div>
+                    ${task.Category ? `<div class="task-category">${escapeHtml(task.Category)}</div>` : ''}
+                </div>`;
+            div.addEventListener('click', () => toggleTask(task.Id));
+            tasksContainer.appendChild(div);
+        });
+    }
+
+    async function toggleTask(id) {
+        try {
+            await fetch(`/api/tasks/${id}/toggle`, { method: 'PUT' });
+            loadTasks();
+        } catch (err) {
+            console.error('Toggle failed:', err);
+        }
+    }
+
+    function escapeHtml(text) {
+        const div = document.createElement('div');
+        div.textContent = text;
+        return div.innerHTML;
+    }
+
+    // ============================================================================
+    // SETTINGS / RESET
+    // ============================================================================
+    const resetBtn = document.getElementById('resetBtn');
+    const resetModal = document.getElementById('resetModal');
+    const resetCancel = document.getElementById('resetCancel');
+    const resetConfirm = document.getElementById('resetConfirm');
+
+    resetBtn.addEventListener('click', () => resetModal.classList.add('show'));
+    resetCancel.addEventListener('click', () => resetModal.classList.remove('show'));
+    resetModal.addEventListener('click', (e) => {
+        if (e.target === resetModal) resetModal.classList.remove('show');
+    });
+
+    resetConfirm.addEventListener('click', async () => {
+        resetConfirm.disabled = true;
+        resetConfirm.textContent = 'Resetting...';
+        try {
+            await fetch('/api/reset', { method: 'POST' });
+            resetModal.classList.remove('show');
+            // Clear chat UI
+            chatMessages.innerHTML = '';
+            tasksContainer.innerHTML = '';
+            // Switch to AI tab and restart onboarding
+            switchTab('AI');
+            sendMessage('Hi');
+        } catch (err) {
+            alert('Reset failed. Please try again.');
+        }
+        resetConfirm.disabled = false;
+        resetConfirm.textContent = 'Reset';
+    });
+
+    // ============================================================================
+    // BOOT
+    // ============================================================================
+    init();
     </script>
 </body>
 </html>
