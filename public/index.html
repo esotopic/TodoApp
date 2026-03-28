@@ -41,19 +41,38 @@
 
         /* Joke banner */
         .joke-banner {
-            background: var(--s1); margin: 8px 16px; padding: 14px 16px;
-            border-radius: 12px; box-shadow: 0 1px 3px rgba(0,0,0,0.04);
-            text-align: center; font-size: 14px; color: var(--tx2);
-            font-style: italic; line-height: 1.4; min-height: 50px;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            margin: 8px 16px; padding: 18px 20px;
+            border-radius: 16px; box-shadow: 0 4px 15px rgba(102, 126, 234, 0.3);
+            text-align: center; font-size: 15px; color: rgba(255,255,255,0.95);
+            font-style: italic; line-height: 1.5; min-height: 64px;
             display: flex; align-items: center; justify-content: center;
-            flex-shrink: 0;
+            flex-shrink: 0; position: relative; overflow: hidden;
         }
-        .joke-banner .joke-icon { margin-right: 8px; font-style: normal; }
+        .joke-banner::before {
+            content: ''; position: absolute; top: -50%; left: -50%;
+            width: 200%; height: 200%;
+            background: radial-gradient(circle at 30% 50%, rgba(255,255,255,0.1) 0%, transparent 50%);
+            pointer-events: none;
+        }
+        .joke-banner .joke-icon { margin-right: 10px; font-style: normal; font-size: 20px; }
 
         /* Page title */
         .page-title {
-            text-align: center; padding: 8px 16px 4px; font-size: 24px;
-            font-weight: 700; color: var(--tx); letter-spacing: -0.02em; flex-shrink: 0;
+            text-align: center; padding: 10px 16px 6px; font-size: 26px;
+            font-weight: 800; letter-spacing: -0.03em; flex-shrink: 0;
+            background: linear-gradient(135deg, #667eea, #764ba2);
+            -webkit-background-clip: text; -webkit-text-fill-color: transparent;
+            background-clip: text;
+        }
+        .page-title .title-icon { -webkit-text-fill-color: initial; margin-right: 4px; }
+        .page-title.todo-title {
+            background: linear-gradient(135deg, #34c759, #30b050);
+            -webkit-background-clip: text; background-clip: text;
+        }
+        .page-title.settings-title {
+            background: linear-gradient(135deg, #8e8e93, #636366);
+            -webkit-background-clip: text; background-clip: text;
         }
 
         /* Location buttons — dynamic, sticky above chat input */
@@ -64,13 +83,13 @@
         .loc-buttons::-webkit-scrollbar { display: none; }
         .loc-btn {
             padding: 9px 14px; border-radius: 20px;
-            border: 2px solid var(--acc); background: var(--s1); color: var(--acc);
+            border: 2px solid #764ba2; background: var(--s1); color: #764ba2;
             font-size: 12px; font-weight: 600;
             letter-spacing: 0.02em; cursor: pointer; transition: all 0.2s;
             text-align: center; font-family: inherit; white-space: nowrap;
             flex-shrink: 0;
         }
-        .loc-btn:hover { background: var(--acc); color: #fff; }
+        .loc-btn:hover { background: linear-gradient(135deg, #667eea, #764ba2); color: #fff; border-color: transparent; }
         .loc-btn:active { transform: scale(0.95); }
         .loc-empty {
             font-size: 12px; color: var(--tx3); padding: 8px 0;
@@ -93,10 +112,12 @@
         .chat-bubble.assistant {
             background: var(--s1); color: var(--tx); border-bottom-left-radius: 6px;
             box-shadow: 0 1px 4px rgba(0,0,0,0.06);
+            border-left: 3px solid #764ba2;
         }
         .chat-bubble.user {
-            background: var(--acc); color: #fff; border-bottom-right-radius: 6px;
-            margin-left: auto;
+            background: linear-gradient(135deg, #667eea, #764ba2); color: #fff;
+            border-bottom-right-radius: 6px;
+            margin-left: auto; box-shadow: 0 2px 8px rgba(102, 126, 234, 0.3);
         }
         .chat-input-row {
             display: flex; gap: 8px; padding: 8px 16px 10px;
@@ -108,12 +129,13 @@
             background: var(--s1); color: var(--tx); outline: none;
             font-family: inherit;
         }
-        .chat-input:focus { border-color: var(--acc); }
+        .chat-input:focus { border-color: #764ba2; }
         .chat-send {
             width: 42px; height: 42px; border-radius: 50%;
-            background: var(--acc); border: none; cursor: pointer;
+            background: linear-gradient(135deg, #667eea, #764ba2); border: none; cursor: pointer;
             display: flex; align-items: center; justify-content: center;
             flex-shrink: 0; transition: opacity 0.2s;
+            box-shadow: 0 2px 8px rgba(102, 126, 234, 0.3);
         }
         .chat-send:disabled { opacity: 0.4; cursor: default; }
         .chat-send svg { width: 20px; height: 20px; }
@@ -131,10 +153,10 @@
         .chip {
             padding: 8px 14px; border-radius: 20px; font-size: 13px;
             font-weight: 500; cursor: pointer; transition: all 0.15s;
-            border: 1.5px solid var(--acc); color: var(--acc); background: var(--s1);
+            border: 1.5px solid #764ba2; color: #764ba2; background: var(--s1);
             font-family: inherit; white-space: nowrap;
         }
-        .chip:hover { background: var(--acc); color: #fff; }
+        .chip:hover { background: linear-gradient(135deg, #667eea, #764ba2); color: #fff; border-color: transparent; }
         .chip:active { transform: scale(0.95); }
 
         /* ============= TODO TAB ============= */
@@ -190,10 +212,10 @@
         }
         .add-task-btn {
             width: 42px; height: 42px; border-radius: 50%;
-            background: var(--acc); border: none; cursor: pointer;
+            background: linear-gradient(135deg, #34c759, #30b050); border: none; cursor: pointer;
             display: flex; align-items: center; justify-content: center;
             flex-shrink: 0; color: #fff; font-size: 22px; font-weight: 300;
-            transition: opacity 0.2s;
+            transition: opacity 0.2s; box-shadow: 0 2px 8px rgba(52, 199, 89, 0.3);
         }
         .add-task-btn:hover { opacity: 0.85; }
         .add-task-form {
@@ -216,7 +238,7 @@
             flex: 1; padding: 10px; border-radius: 10px; border: none;
             font-size: 14px; font-weight: 600; cursor: pointer; font-family: inherit;
         }
-        .add-task-save { background: var(--acc); color: #fff; }
+        .add-task-save { background: linear-gradient(135deg, #34c759, #30b050); color: #fff; }
         .add-task-cancel { background: var(--s2); color: var(--tx); }
         .empty-state {
             text-align: center; padding: 40px 20px; color: var(--tx3);
@@ -264,7 +286,7 @@
             font-size: 11px; font-weight: 500; text-transform: uppercase;
             letter-spacing: 0.5px; transition: color 150ms ease; text-decoration: none;
         }
-        .nav-item.active { color: var(--acc); }
+        .nav-item.active { color: #764ba2; }
         .nav-item .nav-icon { width: 24px; height: 24px; }
 
         /* Confirm dialog */
@@ -304,7 +326,7 @@
             <span id="jokeText">Loading wisdom...</span>
         </div>
 
-        <div class="page-title" id="pageTitle">AI COACH</div>
+        <div class="page-title" id="pageTitle"><span class="title-icon">✨</span> AI Coach</div>
 
         <!-- ============= AI TAB ============= -->
         <div class="tab-panel active" id="panelAI">
@@ -422,7 +444,12 @@
     // ============================================================================
     let currentTab = 'AI';
     const CATEGORIES = ['Home', 'Work', 'Health', 'Learning'];
-    const titles = { AI: 'AI COACH', Todo: 'TODO', Settings: 'SETTINGS' };
+    const titles = {
+        AI: '<span class="title-icon">✨</span> AI Coach',
+        Todo: '<span class="title-icon">✅</span> My Tasks',
+        Settings: '<span class="title-icon">⚙️</span> Settings'
+    };
+    const titleClasses = { AI: '', Todo: 'todo-title', Settings: 'settings-title' };
     const LOC_ICONS = {
         'Costco': '🛒', 'Supermarket': '🛒', 'Grocery Store': '🛒', 'Walmart': '🛒', 'Target': '🎯',
         'Whole Foods': '🥦', 'Trader Joes': '🛒',
@@ -471,7 +498,9 @@
 
     function switchTab(tab) {
         currentTab = tab;
-        document.getElementById('pageTitle').textContent = titles[tab];
+        const titleEl = document.getElementById('pageTitle');
+        titleEl.innerHTML = titles[tab];
+        titleEl.className = 'page-title ' + (titleClasses[tab] || '');
         document.querySelectorAll('.tab-panel').forEach(p => p.classList.remove('active'));
         document.getElementById('panel' + tab).classList.add('active');
         document.querySelectorAll('.nav-item').forEach(n => n.classList.remove('active'));
