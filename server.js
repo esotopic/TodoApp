@@ -126,13 +126,14 @@ app.post('/api/chat/start', requireAuth, async (req, res) => {
             return res.json({ reply: null }); // Already has history
         }
 
-        // Get onboarding state + profile
+        // Get onboarding state + profile + soul
         const stateResult = await db.request().input('userId', sql.Int, userId)
-            .query('SELECT OnboardingComplete, ProfileInfo FROM Todo_UserState WHERE UserId = @userId');
+            .query('SELECT OnboardingComplete, ProfileInfo, Soul FROM Todo_UserState WHERE UserId = @userId');
         const onboardingComplete = stateResult.recordset.length > 0 && stateResult.recordset[0].OnboardingComplete;
         const userProfile = stateResult.recordset.length > 0 ? stateResult.recordset[0].ProfileInfo : null;
+        const soul = stateResult.recordset.length > 0 ? stateResult.recordset[0].Soul : null;
 
-        const systemPrompt = buildSystemPrompt(onboardingComplete, [], req.session.user.username, userProfile);
+        const systemPrompt = buildSystemPrompt(onboardingComplete, [], req.session.user.username, userProfile, null, soul);
 
         // Send a single user message to kick off the conversation
         const response = await anthropic.messages.create({
@@ -203,9 +204,10 @@ app.post('/api/chat', requireAuth, async (req, res) => {
         // Get onboarding state + profile
         const stateResult = await db.request()
             .input('userId', sql.Int, userId)
-            .query('SELECT OnboardingComplete, ProfileInfo FROM Todo_UserState WHERE UserId = @userId');
+            .query('SELECT OnboardingComplete, ProfileInfo, Soul FROM Todo_UserState WHERE UserId = @userId');
         const onboardingComplete = stateResult.recordset.length > 0 && stateResult.recordset[0].OnboardingComplete;
         const userProfile = stateResult.recordset.length > 0 ? stateResult.recordset[0].ProfileInfo : null;
+        const soul = stateResult.recordset.length > 0 ? stateResult.recordset[0].Soul : null;
 
         // Get existing tasks for context
         const tasksResult = await db.request()
@@ -220,7 +222,7 @@ app.post('/api/chat', requireAuth, async (req, res) => {
         const deletedTasks = deletedResult.recordset;
 
         // Build system prompt
-        const systemPrompt = buildSystemPrompt(onboardingComplete, existingTasks, req.session.user.username, userProfile, deletedTasks);
+        const systemPrompt = buildSystemPrompt(onboardingComplete, existingTasks, req.session.user.username, userProfile, deletedTasks, soul);
 
         // Call Claude with tool use
         const tools = [
@@ -399,7 +401,7 @@ app.post('/api/chat', requireAuth, async (req, res) => {
     }
 });
 
-function buildSystemPrompt(onboardingComplete, existingTasks, username, userProfile, deletedTasks) {
+function buildSystemPrompt(onboardingComplete, existingTasks, username, userProfile, deletedTasks, soul) {
     const categoryNote = `
 
 IMPORTANT: The app has exactly 4 task categories: Home, Work, Health, Learning.
@@ -443,8 +445,10 @@ Rules for chips:
 
     const profileContext = userProfile ? `\n\nUSER PROFILE (use this to personalize everything):\n${userProfile}` : '';
 
+    const soulDirective = soul ? `\n\nPERSONALITY / SOUL — CRITICAL:\nThe user has configured your personality. You MUST embody this personality in every response. This overrides your default tone.\n${soul}\nStay in character at all times. Let this personality color your word choice, energy, humor, and how you motivate or push back.` : '';
+
     if (!onboardingComplete) {
-        return `You are a friendly, focused AI task coach inside a Todo app called "1000 Problems Todo". The user's name is ${username}.
+        return `You are a friendly, focused AI task coach inside a Todo app called "1000 Problems Todo". The user's name is ${username}.${soulDirective}
 
 This is an ONBOARDING conversation. Your goal is to learn about the user — who they are, their lifestyle, and priorities — then generate a personalized task list.
 
@@ -506,7 +510,7 @@ WHAT TO INCLUDE in memory:
 
 IMPORTANT: When calling update_memory, include EVERYTHING from the existing profile PLUS the new info. Don't lose old information.`;
 
-    return `You are a helpful AI task coach inside "1000 Problems Todo". The user's name is ${username}. Onboarding is complete.${profileContext}${taskSummary}${deletedContext}${manualContext}${memoryInstruction}
+    return `You are a helpful AI task coach inside "1000 Problems Todo". The user's name is ${username}. Onboarding is complete.${soulDirective}${profileContext}${taskSummary}${deletedContext}${manualContext}${memoryInstruction}
 
 You can help the user:
 - Add new tasks (use save_tasks tool — include ALL existing tasks plus new ones)
@@ -632,6 +636,44 @@ app.put('/api/tasks/:id/toggle', requireAuth, async (req, res) => {
         res.json({ success: true });
     } catch (err) {
         console.error('Toggle error:', err);
+        res.status(500).json({ error: 'Server error' });
+    }
+});
+
+// ============================================================================
+// SOUL — AI personality
+// ============================================================================
+app.get('/api/soul', requireAuth, async (req, res) => {
+    try {
+        const db = await getPool();
+        const result = await db.request()
+            .input('userId', sql.Int, req.session.user.id)
+            .query('SELECT Soul FROM Todo_UserState WHERE UserId = @userId');
+        const soul = result.recordset.length > 0 ? result.recordset[0].Soul : null;
+        res.json({ soul: soul || '' });
+    } catch (err) {
+        console.error('Soul fetch error:', err);
+        res.status(500).json({ error: 'Server error' });
+    }
+});
+
+app.post('/api/soul', requireAuth, async (req, res) => {
+    try {
+        const { soul } = req.body;
+        const db = await getPool();
+        const userId = req.session.user.id;
+        const existing = await db.request().input('userId', sql.Int, userId)
+            .query('SELECT Id FROM Todo_UserState WHERE UserId = @userId');
+        if (existing.recordset.length === 0) {
+            await db.request().input('userId', sql.Int, userId).input('soul', sql.NVarChar, soul || '')
+                .query('INSERT INTO Todo_UserState (UserId, OnboardingComplete, Soul) VALUES (@userId, 0, @soul)');
+        } else {
+            await db.request().input('userId', sql.Int, userId).input('soul', sql.NVarChar, soul || '')
+                .query('UPDATE Todo_UserState SET Soul = @soul, UpdatedDate = GETUTCDATE() WHERE UserId = @userId');
+        }
+        res.json({ success: true });
+    } catch (err) {
+        console.error('Soul save error:', err);
         res.status(500).json({ error: 'Server error' });
     }
 });
