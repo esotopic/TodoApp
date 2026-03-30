@@ -1,3 +1,4 @@
+require('dotenv').config();
 // Migration: Add Soul column to Todo_UserState
 const sql = require('mssql');
 const config = {

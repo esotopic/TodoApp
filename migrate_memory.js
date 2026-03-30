@@ -1,3 +1,4 @@
+require('dotenv').config();
 // Migration: Add Todo_DeletedTasks table and Source column to Todo_Tasks
 const sql = require('mssql');
 const config = {
