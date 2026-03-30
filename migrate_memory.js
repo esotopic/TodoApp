@@ -1,10 +1,11 @@
 // Migration: Add Todo_DeletedTasks table and Source column to Todo_Tasks
 const sql = require('mssql');
 const config = {
-    server: '***REMOVED***',
-    database: '1000Problems',
-    user: '***REMOVED***',
-    password: '***REMOVED***',
+    server: process.env.DB_SERVER,
+    database: process.env.DB_NAME,
+    user: process.env.DB_USER,
+    password: process.env.DB_PASSWORD,
+    port: parseInt(process.env.DB_PORT) || 1433,
     options: { encrypt: true, trustServerCertificate: false, connectTimeout: 30000, requestTimeout: 30000 }
 };
 

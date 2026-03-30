@@ -13,10 +13,11 @@ const anthropic = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY });
 
 // Database config
 const dbConfig = {
-    server: '***REMOVED***',
-    database: '1000Problems',
-    user: '***REMOVED***',
-    password: '***REMOVED***',
+    server: process.env.DB_SERVER,
+    database: process.env.DB_NAME,
+    user: process.env.DB_USER,
+    password: process.env.DB_PASSWORD,
+    port: parseInt(process.env.DB_PORT) || 1433,
     options: { encrypt: true, trustServerCertificate: false, connectTimeout: 30000, requestTimeout: 30000 },
     pool: { max: 5, min: 0, idleTimeoutMillis: 30000 }
 };
@@ -37,7 +38,7 @@ function hashPassword(password, saltBase64) {
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
 app.use(session({
-    secret: '***REMOVED***',
+    secret: process.env.SESSION_SECRET,
     resave: false, saveUninitialized: false,
     cookie: { maxAge: 24 * 60 * 60 * 1000 }
 }));
